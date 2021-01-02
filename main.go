@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/erdemkosk/go-config-service/api/routes"
 	_ "github.com/erdemkosk/go-config-service/docs"
@@ -25,5 +26,6 @@ func main() {
 
 	app := routes.GenerateFiberApp()
 	routes.RegisterRoutes(app)
-	log.Fatal(app.Listen(":4000"))
+	port := os.Getenv("PORT")
+	log.Fatal(app.Listen(":" + port))
 }
