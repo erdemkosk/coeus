@@ -27,7 +27,7 @@ func GenerateFiberApp() *fiber.App {
 	}))
 
 	app.Use(limiter.New(limiter.Config{
-		Max:        10000,
+		Max:        5,
 		Expiration: 30 * time.Second,
 		KeyGenerator: func(c *fiber.Ctx) string {
 			return c.Get("x-forwarded-for")

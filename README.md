@@ -7,6 +7,11 @@ It is a config server developed for other services or programs to use. Data can 
 
 > Config operations is abstracted from the whole system. You don't have to think ✌️.
 
+### Demo
+https://go-config-server.herokuapp.com/docs/index.html#/config/get_api_config__key_
+
+Each endpoint is protected with jwt. It must be entered with default id and pass .env.
+
 ### Swagger
 http://localhost:4000/docs/index.html
 
