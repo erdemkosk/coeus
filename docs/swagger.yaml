@@ -1,0 +1,189 @@
+basePath: /
+definitions:
+  models.AuthToken:
+    properties:
+      data:
+        type: object
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  models.Config:
+    properties:
+      createdAt:
+        type: string
+      id:
+        type: string
+      key:
+        type: string
+      type:
+        type: string
+      updatedAt:
+        type: string
+      value:
+        type: object
+    type: object
+  models.ConfigInput:
+    properties:
+      key:
+        type: string
+      type:
+        type: string
+      value:
+        type: object
+    type: object
+  models.LoginInput:
+    properties:
+      identity:
+        type: string
+      password:
+        type: string
+    type: object
+info:
+  contact:
+    email: erdemkosk@gmail.com
+    name: Mustafa Erdem Köşk
+  description: Swagger structure prepared for config service
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  title: Config Service
+  version: 1.0.0
+paths:
+  /api/config/:
+    post:
+      consumes:
+      - application/json
+      description: Create config with using key
+      parameters:
+      - description: Config Value
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/models.ConfigInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Config'
+      security:
+      - Authorization: []
+      summary: Create config with using key
+      tags:
+      - config
+  /api/config/{key}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete config with using key
+      parameters:
+      - description: Config key value
+        in: path
+        name: key
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Config'
+      security:
+      - Authorization: []
+      summary: Delete config with using key
+      tags:
+      - config
+    get:
+      consumes:
+      - application/json
+      description: Get config with using key
+      parameters:
+      - description: Config key value
+        in: path
+        name: key
+        required: true
+        type: string
+      - description: type
+        enum:
+        - Array
+        - Boolean
+        - Object
+        - String
+        - Number
+        in: query
+        name: types
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Config'
+      security:
+      - Authorization: []
+      summary: Get config with using key
+      tags:
+      - config
+    put:
+      consumes:
+      - application/json
+      description: Update config with using key
+      parameters:
+      - description: Config key value
+        in: path
+        name: key
+        required: true
+        type: string
+      - description: Config Value
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/models.ConfigInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Config'
+      security:
+      - Authorization: []
+      summary: Update config with using key
+      tags:
+      - config
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Get config with using key
+      parameters:
+      - description: Cridentinials
+        in: body
+        name: bottles
+        required: true
+        schema:
+          $ref: '#/definitions/models.LoginInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.AuthToken'
+      summary: Post config with using key
+      tags:
+      - auth
+securityDefinitions:
+  Authorization:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
