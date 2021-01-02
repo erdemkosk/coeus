@@ -17,7 +17,7 @@ go-config-service
 # vendor/
 
 ### Go Patch ###
-/vendor/
+
 /Godeps/
 
 ### macOS ###
