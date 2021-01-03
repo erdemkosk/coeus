@@ -7,24 +7,27 @@ It is a config server developed for other services or programs to use. Data can 
 
 > Config operations is abstracted from the whole system. You don't have to think ✌️.
 
-### Demo
-https://go-config-server.herokuapp.com/docs/index.html#/config/get_api_config__key_
+### Demo✌️
+![Logo](https://i.imgur.com/sAmY4b8.png)
+![Logo](https://i.imgur.com/cRwwJBO.png)
 
-Each endpoint is protected with jwt. It must be entered with default id and pass .env.
+[Demo url 😎](https://go-config-server.herokuapp.com/docs/index.html#/config/get_api_config__key_)
 
-### Swagger
+Only for this endpoint no login is required. You can use it with config name specified in the picture. ( {key : co:test types: "String" })
+
+### Swagger🎉
 http://localhost:4000/docs/index.html
 
 Each endpoint is protected with jwt. It must be entered with default id and pass .env.
 
-### Tech-Stack
+### Tech-Stack🥰
 
 go-config-server uses a number of open source projects to work properly:
 * [Golang] - for runnig server
 * [Mongo Dv] - for storing configs
 * [Redis] - for caching
 
-### Installation
+### Installation🎆
 
 Rabbitmq-mail-consumer-server requires [Go](https://golang.org/) to run.
 
@@ -41,7 +44,7 @@ $ docker build -t  go-config-server .
 $ docker run --env-file .env -p 4000:4000 go-config-server
 ```
 
-### Env Variables
+### Env Variables✨
 
 | Env        | Example           
 | ------------- |:-------------:
