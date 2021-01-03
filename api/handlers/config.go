@@ -42,9 +42,9 @@ func GetConfig(c *fiber.Ctx) error {
 		})
 	}
 
-	conf, err := services.GetConfig(types, key)
+	config, err := services.GetConfig(types, key)
 
-	if err != nil || conf.Key == "" {
+	if err != nil || config.Key == "" {
 		return c.Status(404).JSON(&fiber.Map{
 			"success": false,
 			"error":   ERROR_CONNOT_FIND,
@@ -52,8 +52,8 @@ func GetConfig(c *fiber.Ctx) error {
 	}
 
 	return c.Status(200).JSON(&fiber.Map{
-		"success": false,
-		"error":   conf,
+		"success": true,
+		"error":   config,
 	})
 }
 
