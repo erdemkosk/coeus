@@ -38,7 +38,7 @@ func GetConfig(c *fiber.Ctx) error {
 	if isValidTye == "" {
 		return c.Status(404).JSON(&fiber.Map{
 			"success": false,
-			"error":   types,
+			"error":   ERROR_INVALID_TYPE,
 		})
 	}
 
@@ -53,7 +53,7 @@ func GetConfig(c *fiber.Ctx) error {
 
 	return c.Status(200).JSON(&fiber.Map{
 		"success": true,
-		"error":   config,
+		"config":  config,
 	})
 }
 
@@ -105,7 +105,7 @@ func CreateConfig(c *fiber.Ctx) error {
 
 	return c.Status(200).JSON(&fiber.Map{
 		"success": true,
-		"data":    result,
+		"config":  result,
 	})
 }
 
@@ -149,7 +149,7 @@ func UpdateConfig(c *fiber.Ctx) error {
 
 	return c.Status(200).JSON(&fiber.Map{
 		"success": true,
-		"data":    result,
+		"config":  result,
 	})
 }
 

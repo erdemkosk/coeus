@@ -13,7 +13,7 @@ import (
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Param bottles body models.LoginInput true "Cridentinials"
+// @Param cridentinials body models.LoginInput true "Cridentinials"
 // @Success 200 {object} models.AuthToken
 // @Router /auth/login [post]
 func Login(c *fiber.Ctx) error {

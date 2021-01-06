@@ -167,7 +167,7 @@ paths:
       parameters:
       - description: Cridentinials
         in: body
-        name: bottles
+        name: cridentinials
         required: true
         schema:
           $ref: '#/definitions/models.LoginInput'

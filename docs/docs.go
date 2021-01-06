@@ -216,7 +216,7 @@ var doc = `{
                 "parameters": [
                     {
                         "description": "Cridentinials",
-                        "name": "bottles",
+                        "name": "cridentinials",
                         "in": "body",
                         "required": true,
                         "schema": {
