@@ -1,4 +1,5 @@
 FROM golang:alpine
+RUN apk add --no-cache git
 
 # Set necessary environmet variables needed for our image
 ENV GO111MODULE=on \

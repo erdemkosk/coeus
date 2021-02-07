@@ -1,4 +1,4 @@
-module github.com/erdemkosk/go-config-service
+module github.com/erdemkosk/go_config_service
 
 go 1.14
 
