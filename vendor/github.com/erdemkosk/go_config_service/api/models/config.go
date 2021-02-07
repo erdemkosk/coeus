@@ -1,7 +1,7 @@
 package models
 
 import (
-	constValues "github.com/erdemkosk/go_config_service/consts"
+	constValues "github.com/erdemkosk/go-config-service/consts"
 )
 
 type Config struct {

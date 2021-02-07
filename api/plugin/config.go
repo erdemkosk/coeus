@@ -3,7 +3,7 @@ package plugin
 import (
 	"os"
 
-	models "github.com/erdemkosk/go_config_service/api/models"
+	models "github.com/erdemkosk/go-config-service/api/models"
 	_ "github.com/joho/godotenv/autoload"
 )
 

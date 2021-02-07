@@ -6,7 +6,6 @@ require (
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/arsmn/fiber-swagger/v2 v2.1.3
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
-	github.com/erdemkosk/go_config_service v0.0.0-20201226162243-9fb54ee4d6f1
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/gofiber/fiber/v2 v2.3.0
 	github.com/gofiber/jwt/v2 v2.1.0
