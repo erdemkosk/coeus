@@ -6,11 +6,14 @@ package fiber
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"path/filepath"
 	"reflect"
@@ -21,7 +24,8 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2/internal/bytebufferpool"
-	"github.com/gofiber/fiber/v2/internal/encoding/json"
+	"github.com/gofiber/fiber/v2/internal/dictpool"
+	"github.com/gofiber/fiber/v2/internal/go-json"
 	"github.com/gofiber/fiber/v2/internal/schema"
 	"github.com/gofiber/fiber/v2/utils"
 	"github.com/valyala/fasthttp"
@@ -30,23 +34,36 @@ import (
 // maxParams defines the maximum number of parameters per route.
 const maxParams = 30
 
+// Some constants for BodyParser, QueryParser and ReqHeaderParser.
+const (
+	queryTag     = "query"
+	reqHeaderTag = "reqHeader"
+	bodyTag      = "form"
+)
+
+// userContextKey define the key name for storing context.Context in *fasthttp.RequestCtx
+const userContextKey = "__local_user_context__"
+
 // Ctx represents the Context which hold the HTTP request and response.
 // It has methods for the request query string, parameters, body, HTTP headers and so on.
 type Ctx struct {
-	app          *App                 // Reference to *App
-	route        *Route               // Reference to *Route
-	indexRoute   int                  // Index of the current route
-	indexHandler int                  // Index of the current handler
-	method       string               // HTTP method
-	methodINT    int                  // HTTP method INT equivalent
-	baseURI      string               // HTTP base uri
-	path         string               // Prettified HTTP path -> string copy from pathBuffer
-	pathBuffer   []byte               // Prettified HTTP path buffer
-	treePath     string               // Path for the search in the tree
-	pathOriginal string               // Original HTTP path
-	values       [maxParams]string    // Route parameter values
-	fasthttp     *fasthttp.RequestCtx // Reference to *fasthttp.RequestCtx
-	matched      bool                 // Non use route matched
+	app                 *App                 // Reference to *App
+	route               *Route               // Reference to *Route
+	indexRoute          int                  // Index of the current route
+	indexHandler        int                  // Index of the current handler
+	method              string               // HTTP method
+	methodINT           int                  // HTTP method INT equivalent
+	baseURI             string               // HTTP base uri
+	path                string               // HTTP path with the modifications by the configuration -> string copy from pathBuffer
+	pathBuffer          []byte               // HTTP path buffer
+	detectionPath       string               // Route detection path                                  -> string copy from detectionPathBuffer
+	detectionPathBuffer []byte               // HTTP detectionPath buffer
+	treePath            string               // Path for the search in the tree
+	pathOriginal        string               // Original HTTP path
+	values              [maxParams]string    // Route parameter values
+	fasthttp            *fasthttp.RequestCtx // Reference to *fasthttp.RequestCtx
+	matched             bool                 // Non use route matched
+	viewBindMap         *dictpool.Dict       // Default view map to bind template engine
 }
 
 // Range data for c.Range
@@ -60,21 +77,37 @@ type Range struct {
 
 // Cookie data for c.Cookie
 type Cookie struct {
-	Name     string    `json:"name"`
-	Value    string    `json:"value"`
-	Path     string    `json:"path"`
-	Domain   string    `json:"domain"`
-	MaxAge   int       `json:"max_age"`
-	Expires  time.Time `json:"expires"`
-	Secure   bool      `json:"secure"`
-	HTTPOnly bool      `json:"http_only"`
-	SameSite string    `json:"same_site"`
+	Name        string    `json:"name"`
+	Value       string    `json:"value"`
+	Path        string    `json:"path"`
+	Domain      string    `json:"domain"`
+	MaxAge      int       `json:"max_age"`
+	Expires     time.Time `json:"expires"`
+	Secure      bool      `json:"secure"`
+	HTTPOnly    bool      `json:"http_only"`
+	SameSite    string    `json:"same_site"`
+	SessionOnly bool      `json:"session_only"`
 }
 
 // Views is the interface that wraps the Render function.
 type Views interface {
 	Load() error
 	Render(io.Writer, string, interface{}, ...string) error
+}
+
+// ParserType require two element, type and converter for register.
+// Use ParserType with BodyParser for parsing custom type in form data.
+type ParserType struct {
+	Customtype interface{}
+	Converter  func(string) reflect.Value
+}
+
+// ParserConfig form decoder config for SetParserDecoder
+type ParserConfig struct {
+	IgnoreUnknownKeys bool
+	SetAliasTag       string
+	ParserType        []ParserType
+	ZeroEmpty         bool
 }
 
 // AcquireCtx retrieves a new Ctx from the pool.
@@ -88,17 +121,16 @@ func (app *App) AcquireCtx(fctx *fasthttp.RequestCtx) *Ctx {
 	// Reset matched flag
 	c.matched = false
 	// Set paths
-	c.pathBuffer = append(c.pathBuffer[0:0], fctx.URI().PathOriginal()...)
-	c.pathOriginal = getString(fctx.URI().PathOriginal())
+	c.pathOriginal = app.getString(fctx.URI().PathOriginal())
 	// Set method
-	c.method = getString(fctx.Request.Header.Method())
+	c.method = app.getString(fctx.Request.Header.Method())
 	c.methodINT = methodInt(c.method)
 	// Attach *fasthttp.RequestCtx to ctx
 	c.fasthttp = fctx
 	// reset base uri
 	c.baseURI = ""
 	// Prettify path
-	c.prettifyPath()
+	c.configDependentPaths()
 	return c
 }
 
@@ -107,6 +139,9 @@ func (app *App) ReleaseCtx(c *Ctx) {
 	// Reset values
 	c.route = nil
 	c.fasthttp = nil
+	if c.viewBindMap != nil {
+		dictpool.ReleaseDict(c.viewBindMap)
+	}
 	app.pool.Put(c)
 }
 
@@ -192,7 +227,7 @@ func (c *Ctx) Append(field string, values ...string) {
 	if len(values) == 0 {
 		return
 	}
-	h := getString(c.fasthttp.Response.Header.Peek(field))
+	h := c.app.getString(c.fasthttp.Response.Header.Peek(field))
 	originalH := h
 	for _, value := range values {
 		if len(h) == 0 {
@@ -213,7 +248,7 @@ func (c *Ctx) Attachment(filename ...string) {
 		fname := filepath.Base(filename[0])
 		c.Type(filepath.Ext(fname))
 
-		c.setCanonical(HeaderContentDisposition, `attachment; filename="`+quoteString(fname)+`"`)
+		c.setCanonical(HeaderContentDisposition, `attachment; filename="`+c.app.quoteString(fname)+`"`)
 		return
 	}
 	c.setCanonical(HeaderContentDisposition, "attachment")
@@ -234,52 +269,104 @@ func (c *Ctx) BaseURL() string {
 // Returned value is only valid within the handler. Do not store any references.
 // Make copies or use the Immutable setting instead.
 func (c *Ctx) Body() []byte {
-	return c.fasthttp.Request.Body()
+	var err error
+	var encoding string
+	var body []byte
+	// faster than peek
+	c.Request().Header.VisitAll(func(key, value []byte) {
+		if utils.UnsafeString(key) == HeaderContentEncoding {
+			encoding = utils.UnsafeString(value)
+		}
+	})
+
+	switch encoding {
+	case StrGzip:
+		body, err = c.fasthttp.Request.BodyGunzip()
+	case StrBr, StrBrotli:
+		body, err = c.fasthttp.Request.BodyUnbrotli()
+	case StrDeflate:
+		body, err = c.fasthttp.Request.BodyInflate()
+	default:
+		body = c.fasthttp.Request.Body()
+	}
+
+	if err != nil {
+		return []byte(err.Error())
+	}
+
+	return body
 }
 
-// decoderPool helps to improve BodyParser's and QueryParser's performance
+// decoderPool helps to improve BodyParser's, QueryParser's and ReqHeaderParser's performance
 var decoderPool = &sync.Pool{New: func() interface{} {
-	var decoder = schema.NewDecoder()
-	decoder.IgnoreUnknownKeys(true)
-	return decoder
+	return decoderBuilder(ParserConfig{
+		IgnoreUnknownKeys: true,
+		ZeroEmpty:         true,
+	})
 }}
+
+// SetParserDecoder allow globally change the option of form decoder, update decoderPool
+func SetParserDecoder(parserConfig ParserConfig) {
+	decoderPool = &sync.Pool{New: func() interface{} {
+		return decoderBuilder(parserConfig)
+	}}
+}
+
+func decoderBuilder(parserConfig ParserConfig) interface{} {
+	decoder := schema.NewDecoder()
+	decoder.IgnoreUnknownKeys(parserConfig.IgnoreUnknownKeys)
+	if parserConfig.SetAliasTag != "" {
+		decoder.SetAliasTag(parserConfig.SetAliasTag)
+	}
+	for _, v := range parserConfig.ParserType {
+		decoder.RegisterConverter(reflect.ValueOf(v.Customtype).Interface(), v.Converter)
+	}
+	decoder.ZeroEmpty(parserConfig.ZeroEmpty)
+	return decoder
+}
 
 // BodyParser binds the request body to a struct.
 // It supports decoding the following content types based on the Content-Type header:
 // application/json, application/xml, application/x-www-form-urlencoded, multipart/form-data
 // If none of the content types above are matched, it will return a ErrUnprocessableEntity error
 func (c *Ctx) BodyParser(out interface{}) error {
-	// Get decoder from pool
-	schemaDecoder := decoderPool.Get().(*schema.Decoder)
-	defer decoderPool.Put(schemaDecoder)
-
 	// Get content-type
 	ctype := utils.ToLower(utils.UnsafeString(c.fasthttp.Request.Header.ContentType()))
 
+	ctype = utils.ParseVendorSpecificContentType(ctype)
+
 	// Parse body accordingly
 	if strings.HasPrefix(ctype, MIMEApplicationJSON) {
-		schemaDecoder.SetAliasTag("json")
-		return json.Unmarshal(c.fasthttp.Request.Body(), out)
+		return c.app.config.JSONDecoder(c.Body(), out)
 	}
 	if strings.HasPrefix(ctype, MIMEApplicationForm) {
-		schemaDecoder.SetAliasTag("form")
 		data := make(map[string][]string)
-		c.fasthttp.PostArgs().VisitAll(func(key []byte, val []byte) {
-			data[utils.UnsafeString(key)] = append(data[utils.UnsafeString(key)], utils.UnsafeString(val))
+		c.fasthttp.PostArgs().VisitAll(func(key, val []byte) {
+			k := utils.UnsafeString(key)
+			v := utils.UnsafeString(val)
+
+			if strings.Contains(v, ",") && equalFieldType(out, reflect.Slice, k) {
+				values := strings.Split(v, ",")
+				for i := 0; i < len(values); i++ {
+					data[k] = append(data[k], values[i])
+				}
+			} else {
+				data[k] = append(data[k], v)
+			}
+
 		})
-		return schemaDecoder.Decode(out, data)
+
+		return c.parseToStruct(bodyTag, out, data)
 	}
 	if strings.HasPrefix(ctype, MIMEMultipartForm) {
-		schemaDecoder.SetAliasTag("form")
 		data, err := c.fasthttp.MultipartForm()
 		if err != nil {
 			return err
 		}
-		return schemaDecoder.Decode(out, data.Value)
+		return c.parseToStruct(bodyTag, out, data.Value)
 	}
 	if strings.HasPrefix(ctype, MIMETextXML) || strings.HasPrefix(ctype, MIMEApplicationXML) {
-		schemaDecoder.SetAliasTag("xml")
-		return xml.Unmarshal(c.fasthttp.Request.Body(), out)
+		return xml.Unmarshal(c.Body(), out)
 	}
 	// No suitable content type found
 	return ErrUnprocessableEntity
@@ -305,6 +392,23 @@ func (c *Ctx) Context() *fasthttp.RequestCtx {
 	return c.fasthttp
 }
 
+// UserContext returns a context implementation that was set by
+// user earlier or returns a non-nil, empty context,if it was not set earlier.
+func (c *Ctx) UserContext() context.Context {
+	ctx, ok := c.fasthttp.UserValue(userContextKey).(context.Context)
+	if !ok {
+		ctx = context.Background()
+		c.SetUserContext(ctx)
+	}
+
+	return ctx
+}
+
+// SetUserContext sets a context implementation by user.
+func (c *Ctx) SetUserContext(ctx context.Context) {
+	c.fasthttp.SetUserValue(userContextKey, ctx)
+}
+
 // Cookie sets a cookie by passing a cookie struct.
 func (c *Ctx) Cookie(cookie *Cookie) {
 	fcookie := fasthttp.AcquireCookie()
@@ -312,16 +416,23 @@ func (c *Ctx) Cookie(cookie *Cookie) {
 	fcookie.SetValue(cookie.Value)
 	fcookie.SetPath(cookie.Path)
 	fcookie.SetDomain(cookie.Domain)
-	fcookie.SetMaxAge(cookie.MaxAge)
-	fcookie.SetExpire(cookie.Expires)
+	// only set max age and expiry when SessionOnly is false
+	// i.e. cookie supposed to last beyond browser session
+	// refer: https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies#define_the_lifetime_of_a_cookie
+	if !cookie.SessionOnly {
+		fcookie.SetMaxAge(cookie.MaxAge)
+		fcookie.SetExpire(cookie.Expires)
+	}
 	fcookie.SetSecure(cookie.Secure)
 	fcookie.SetHTTPOnly(cookie.HTTPOnly)
 
 	switch utils.ToLower(cookie.SameSite) {
-	case "strict":
+	case CookieSameSiteStrictMode:
 		fcookie.SetSameSite(fasthttp.CookieSameSiteStrictMode)
-	case "none":
+	case CookieSameSiteNoneMode:
 		fcookie.SetSameSite(fasthttp.CookieSameSiteNoneMode)
+	case CookieSameSiteDisabled:
+		fcookie.SetSameSite(fasthttp.CookieSameSiteDisabled)
 	default:
 		fcookie.SetSameSite(fasthttp.CookieSameSiteLaxMode)
 	}
@@ -336,7 +447,7 @@ func (c *Ctx) Cookie(cookie *Cookie) {
 // The returned value is only valid within the handler. Do not store any references.
 // Make copies or use the Immutable setting to use the value outside the Handler.
 func (c *Ctx) Cookies(key string, defaultValue ...string) string {
-	return defaultString(getString(c.fasthttp.Request.Header.Cookie(key)), defaultValue)
+	return defaultString(c.app.getString(c.fasthttp.Request.Header.Cookie(key)), defaultValue)
 }
 
 // Download transfers the file from path as an attachment.
@@ -350,7 +461,7 @@ func (c *Ctx) Download(file string, filename ...string) error {
 	} else {
 		fname = filepath.Base(file)
 	}
-	c.setCanonical(HeaderContentDisposition, `attachment; filename="`+quoteString(fname)+`"`)
+	c.setCanonical(HeaderContentDisposition, `attachment; filename="`+c.app.quoteString(fname)+`"`)
 	return c.SendFile(file)
 }
 
@@ -382,7 +493,7 @@ func (c *Ctx) Format(body interface{}) error {
 	case string:
 		b = val
 	case []byte:
-		b = getString(val)
+		b = c.app.getString(val)
 	default:
 		b = fmt.Sprintf("%v", val)
 	}
@@ -417,7 +528,7 @@ func (c *Ctx) FormFile(key string) (*multipart.FileHeader, error) {
 // Returned value is only valid within the handler. Do not store any references.
 // Make copies or use the Immutable setting instead.
 func (c *Ctx) FormValue(key string, defaultValue ...string) string {
-	return defaultString(getString(c.fasthttp.FormValue(key)), defaultValue)
+	return defaultString(c.app.getString(c.fasthttp.FormValue(key)), defaultValue)
 }
 
 // Fresh returns true when the response is still “fresh” in the client's cache,
@@ -428,8 +539,8 @@ func (c *Ctx) FormValue(key string, defaultValue ...string) string {
 // https://github.com/jshttp/fresh/blob/10e0471669dbbfbfd8de65bc6efac2ddd0bfa057/index.js#L33
 func (c *Ctx) Fresh() bool {
 	// fields
-	var modifiedSince = c.Get(HeaderIfModifiedSince)
-	var noneMatch = c.Get(HeaderIfNoneMatch)
+	modifiedSince := c.Get(HeaderIfModifiedSince)
+	noneMatch := c.Get(HeaderIfNoneMatch)
 
 	// unconditional request
 	if modifiedSince == "" && noneMatch == "" {
@@ -446,16 +557,16 @@ func (c *Ctx) Fresh() bool {
 
 	// if-none-match
 	if noneMatch != "" && noneMatch != "*" {
-		var etag = getString(c.fasthttp.Response.Header.Peek(HeaderETag))
+		etag := c.app.getString(c.fasthttp.Response.Header.Peek(HeaderETag))
 		if etag == "" {
 			return false
 		}
-		if isEtagStale(etag, getBytes(noneMatch)) {
+		if c.app.isEtagStale(etag, c.app.getBytes(noneMatch)) {
 			return false
 		}
 
 		if modifiedSince != "" {
-			var lastModified = getString(c.fasthttp.Response.Header.Peek(HeaderLastModified))
+			lastModified := c.app.getString(c.fasthttp.Response.Header.Peek(HeaderLastModified))
 			if lastModified != "" {
 				lastModifiedTime, err := http.ParseTime(lastModified)
 				if err != nil {
@@ -477,21 +588,67 @@ func (c *Ctx) Fresh() bool {
 // Returned value is only valid within the handler. Do not store any references.
 // Make copies or use the Immutable setting instead.
 func (c *Ctx) Get(key string, defaultValue ...string) string {
-	return defaultString(getString(c.fasthttp.Request.Header.Peek(key)), defaultValue)
+	return defaultString(c.app.getString(c.fasthttp.Request.Header.Peek(key)), defaultValue)
 }
 
-// Hostname contains the hostname derived from the Host HTTP header.
+// GetRespHeader returns the HTTP response header specified by field.
+// Field names are case-insensitive
 // Returned value is only valid within the handler. Do not store any references.
 // Make copies or use the Immutable setting instead.
+func (c *Ctx) GetRespHeader(key string, defaultValue ...string) string {
+	return defaultString(c.app.getString(c.fasthttp.Response.Header.Peek(key)), defaultValue)
+}
+
+// GetReqHeaders returns the HTTP request headers.
+// Returned value is only valid within the handler. Do not store any references.
+// Make copies or use the Immutable setting instead.
+func (c *Ctx) GetReqHeaders() map[string]string {
+	headers := make(map[string]string)
+	c.Request().Header.VisitAll(func(k, v []byte) {
+		headers[string(k)] = c.app.getString(v)
+	})
+
+	return headers
+}
+
+// GetRespHeaders returns the HTTP response headers.
+// Returned value is only valid within the handler. Do not store any references.
+// Make copies or use the Immutable setting instead.
+func (c *Ctx) GetRespHeaders() map[string]string {
+	headers := make(map[string]string)
+	c.Response().Header.VisitAll(func(k, v []byte) {
+		headers[string(k)] = c.app.getString(v)
+	})
+
+	return headers
+}
+
+// Hostname contains the hostname derived from the X-Forwarded-Host or Host HTTP header.
+// Returned value is only valid within the handler. Do not store any references.
+// Make copies or use the Immutable setting instead.
+// Please use Config.EnableTrustedProxyCheck to prevent header spoofing, in case when your app is behind the proxy.
 func (c *Ctx) Hostname() string {
-	return getString(c.fasthttp.Request.URI().Host())
+	if c.IsProxyTrusted() {
+		if host := c.Get(HeaderXForwardedHost); len(host) > 0 {
+			return host
+		}
+	}
+	return c.app.getString(c.fasthttp.Request.URI().Host())
+}
+
+// Port returns the remote port of the request.
+func (c *Ctx) Port() string {
+	port := c.fasthttp.RemoteAddr().(*net.TCPAddr).Port
+	return strconv.Itoa(port)
 }
 
 // IP returns the remote IP address of the request.
+// Please use Config.EnableTrustedProxyCheck to prevent header spoofing, in case when your app is behind the proxy.
 func (c *Ctx) IP() string {
-	if len(c.app.config.ProxyHeader) > 0 {
+	if c.IsProxyTrusted() && len(c.app.config.ProxyHeader) > 0 {
 		return c.Get(c.app.config.ProxyHeader)
 	}
+
 	return c.fasthttp.RemoteIP().String()
 }
 
@@ -506,10 +663,10 @@ func (c *Ctx) IPs() (ips []string) {
 	for {
 		commaPos = bytes.IndexByte(header, ',')
 		if commaPos != -1 {
-			ips[i] = utils.Trim(getString(header[:commaPos]), ' ')
+			ips[i] = utils.Trim(c.app.getString(header[:commaPos]), ' ')
 			header, i = header[commaPos+1:], i+1
 		} else {
-			ips[i] = utils.Trim(getString(header), ' ')
+			ips[i] = utils.Trim(c.app.getString(header), ' ')
 			return
 		}
 	}
@@ -535,7 +692,7 @@ func (c *Ctx) Is(extension string) bool {
 // and a nil slice encodes as the null JSON value.
 // This method also sets the content header to application/json.
 func (c *Ctx) JSON(data interface{}) error {
-	raw, err := json.Marshal(data)
+	raw, err := c.app.config.JSONEncoder(data)
 	if err != nil {
 		return err
 	}
@@ -549,7 +706,6 @@ func (c *Ctx) JSON(data interface{}) error {
 // By default, the callback name is simply callback.
 func (c *Ctx) JSONP(data interface{}, callback ...string) error {
 	raw, err := json.Marshal(data)
-
 	if err != nil {
 		return err
 	}
@@ -562,7 +718,7 @@ func (c *Ctx) JSONP(data interface{}, callback ...string) error {
 		cb = "callback"
 	}
 
-	result = cb + "(" + getString(raw) + ");"
+	result = cb + "(" + c.app.getString(raw) + ");"
 
 	c.setCanonical(HeaderXContentTypeOptions, "nosniff")
 	c.fasthttp.Response.Header.SetContentType(MIMEApplicationJavaScriptCharsetUTF8)
@@ -584,7 +740,7 @@ func (c *Ctx) Links(link ...string) {
 			_, _ = bb.WriteString(`; rel="` + link[i] + `",`)
 		}
 	}
-	c.setCanonical(HeaderLink, utils.TrimRight(getString(bb.Bytes()), ','))
+	c.setCanonical(HeaderLink, utils.TrimRight(c.app.getString(bb.Bytes()), ','))
 	bytebufferpool.Put(bb)
 }
 
@@ -638,11 +794,19 @@ func (c *Ctx) Next() (err error) {
 	return err
 }
 
+// RestartRouting instead of going to the next handler. This may be usefull after
+// changing the request path. Note that handlers might be executed again.
+func (c *Ctx) RestartRouting() error {
+	c.indexRoute = -1
+	_, err := c.app.next(c)
+	return err
+}
+
 // OriginalURL contains the original request URL.
 // Returned value is only valid within the handler. Do not store any references.
 // Make copies or use the Immutable setting to use the value outside the Handler.
 func (c *Ctx) OriginalURL() string {
-	return getString(c.fasthttp.Request.Header.RequestURI())
+	return c.app.getString(c.fasthttp.Request.Header.RequestURI())
 }
 
 // Params is used to get the route parameters.
@@ -669,43 +833,63 @@ func (c *Ctx) Params(key string, defaultValue ...string) string {
 	return defaultString("", defaultValue)
 }
 
+// ParamsInt is used to get an integer from the route parameters
+// it defaults to zero if the parameter is not found or if the
+// parameter cannot be converted to an integer
+// If a default value is given, it will returb that value in case the param
+// doesn't exist or cannot be converted to an integrer
+func (c *Ctx) ParamsInt(key string, defaultValue ...int) (int, error) {
+	// Use Atoi to convert the param to an int or return zero and an error
+	value, err := strconv.Atoi(c.Params(key))
+	if err != nil {
+		if len(defaultValue) > 0 {
+			return defaultValue[0], nil
+		} else {
+			return 0, err
+		}
+	}
+
+	return value, nil
+}
+
 // Path returns the path part of the request URL.
 // Optionally, you could override the path.
 func (c *Ctx) Path(override ...string) string {
 	if len(override) != 0 && c.path != override[0] {
 		// Set new path to context
-		c.pathBuffer = append(c.pathBuffer[0:0], override[0]...)
 		c.pathOriginal = override[0]
-		// c.path = override[0]
-		// c.pathOriginal = c.path
 
 		// Set new path to request context
 		c.fasthttp.Request.URI().SetPath(c.pathOriginal)
 		// Prettify path
-		c.prettifyPath()
+		c.configDependentPaths()
 	}
-	return c.pathOriginal
+	return c.path
 }
 
 // Protocol contains the request protocol string: http or https for TLS requests.
+// Use Config.EnableTrustedProxyCheck to prevent header spoofing, in case when your app is behind the proxy.
 func (c *Ctx) Protocol() string {
 	if c.fasthttp.IsTLS() {
 		return "https"
 	}
 	scheme := "http"
+	if !c.IsProxyTrusted() {
+		return scheme
+	}
 	c.fasthttp.Request.Header.VisitAll(func(key, val []byte) {
 		if len(key) < 12 {
 			return // X-Forwarded-
 		} else if bytes.HasPrefix(key, []byte("X-Forwarded-")) {
 			if bytes.Equal(key, []byte(HeaderXForwardedProto)) {
-				scheme = getString(val)
+				scheme = c.app.getString(val)
 			} else if bytes.Equal(key, []byte(HeaderXForwardedProtocol)) {
-				scheme = getString(val)
+				scheme = c.app.getString(val)
 			} else if bytes.Equal(key, []byte(HeaderXForwardedSsl)) && bytes.Equal(val, []byte("on")) {
 				scheme = "https"
 			}
 		} else if bytes.Equal(key, []byte(HeaderXUrlScheme)) {
-			scheme = getString(val)
+			scheme = c.app.getString(val)
 		}
 	})
 	return scheme
@@ -717,22 +901,16 @@ func (c *Ctx) Protocol() string {
 // Returned value is only valid within the handler. Do not store any references.
 // Make copies or use the Immutable setting to use the value outside the Handler.
 func (c *Ctx) Query(key string, defaultValue ...string) string {
-	return defaultString(getString(c.fasthttp.QueryArgs().Peek(key)), defaultValue)
+	return defaultString(c.app.getString(c.fasthttp.QueryArgs().Peek(key)), defaultValue)
 }
 
 // QueryParser binds the query string to a struct.
 func (c *Ctx) QueryParser(out interface{}) error {
-	// Get decoder from pool
-	var decoder = decoderPool.Get().(*schema.Decoder)
-	defer decoderPool.Put(decoder)
-
-	// Set correct alias tag
-	decoder.SetAliasTag("query")
-
 	data := make(map[string][]string)
-	c.fasthttp.QueryArgs().VisitAll(func(key []byte, val []byte) {
+	c.fasthttp.QueryArgs().VisitAll(func(key, val []byte) {
 		k := utils.UnsafeString(key)
 		v := utils.UnsafeString(val)
+
 		if strings.Contains(v, ",") && equalFieldType(out, reflect.Slice, k) {
 			values := strings.Split(v, ",")
 			for i := 0; i < len(values); i++ {
@@ -741,14 +919,48 @@ func (c *Ctx) QueryParser(out interface{}) error {
 		} else {
 			data[k] = append(data[k], v)
 		}
+
 	})
 
-	return decoder.Decode(out, data)
+	return c.parseToStruct(queryTag, out, data)
+}
+
+// ReqHeaderParser binds the request header strings to a struct.
+func (c *Ctx) ReqHeaderParser(out interface{}) error {
+	data := make(map[string][]string)
+	c.fasthttp.Request.Header.VisitAll(func(key, val []byte) {
+		k := utils.UnsafeString(key)
+		v := utils.UnsafeString(val)
+
+		if strings.Contains(v, ",") && equalFieldType(out, reflect.Slice, k) {
+			values := strings.Split(v, ",")
+			for i := 0; i < len(values); i++ {
+				data[k] = append(data[k], values[i])
+			}
+		} else {
+			data[k] = append(data[k], v)
+		}
+
+	})
+
+	return c.parseToStruct(reqHeaderTag, out, data)
+}
+
+func (c *Ctx) parseToStruct(aliasTag string, out interface{}, data map[string][]string) error {
+	// Get decoder from pool
+	schemaDecoder := decoderPool.Get().(*schema.Decoder)
+	defer decoderPool.Put(schemaDecoder)
+
+	// Set alias tag
+	schemaDecoder.SetAliasTag(aliasTag)
+
+	return schemaDecoder.Decode(out, data)
 }
 
 func equalFieldType(out interface{}, kind reflect.Kind, key string) bool {
 	// Get type of interface
 	outTyp := reflect.TypeOf(out).Elem()
+	key = utils.ToLower(key)
 	// Must be a struct to match a field
 	if outTyp.Kind() != reflect.Struct {
 		return false
@@ -772,9 +984,11 @@ func equalFieldType(out interface{}, kind reflect.Kind, key string) bool {
 			continue
 		}
 		// Get tag from field if exist
-		inputFieldName := typeField.Tag.Get(key)
+		inputFieldName := typeField.Tag.Get(queryTag)
 		if inputFieldName == "" {
 			inputFieldName = typeField.Name
+		} else {
+			inputFieldName = strings.Split(inputFieldName, ",")[0]
 		}
 		// Compare field/tag with provided key
 		if utils.ToLower(inputFieldName) == key {
@@ -851,6 +1065,65 @@ func (c *Ctx) Redirect(location string, status ...int) error {
 	return nil
 }
 
+// Add vars to default view var map binding to template engine.
+// Variables are read by the Render method and may be overwritten.
+func (c *Ctx) Bind(vars Map) error {
+	// init viewBindMap - lazy map
+	if c.viewBindMap == nil {
+		c.viewBindMap = dictpool.AcquireDict()
+	}
+	for k, v := range vars {
+		c.viewBindMap.Set(k, v)
+	}
+
+	return nil
+}
+
+// get URL location from route using parameters
+func (c *Ctx) getLocationFromRoute(route Route, params Map) (string, error) {
+	buf := bytebufferpool.Get()
+	for _, segment := range route.routeParser.segs {
+		if segment.IsParam {
+			for key, val := range params {
+				if key == segment.ParamName || segment.IsGreedy {
+					_, err := buf.WriteString(utils.ToString(val))
+					if err != nil {
+						return "", err
+					}
+				}
+			}
+		} else {
+			_, err := buf.WriteString(segment.Const)
+			if err != nil {
+				return "", err
+			}
+		}
+	}
+	location := buf.String()
+	bytebufferpool.Put(buf)
+	return location, nil
+}
+
+// RedirectToRoute to the Route registered in the app with appropriate parameters
+// If status is not specified, status defaults to 302 Found.
+func (c *Ctx) RedirectToRoute(routeName string, params Map, status ...int) error {
+	location, err := c.getLocationFromRoute(c.App().GetRoute(routeName), params)
+	if err != nil {
+		return err
+	}
+	return c.Redirect(location, status...)
+}
+
+// RedirectBack to the URL to referer
+// If status is not specified, status defaults to 302 Found.
+func (c *Ctx) RedirectBack(fallback string, status ...int) error {
+	location := c.Get(HeaderReferer)
+	if location == "" {
+		location = fallback
+	}
+	return c.Redirect(location, status...)
+}
+
 // Render a template with data and sends a text/html response.
 // We support the following engines: html, amber, handlebars, mustache, pug
 func (c *Ctx) Render(name string, bind interface{}, layouts ...string) error {
@@ -859,19 +1132,38 @@ func (c *Ctx) Render(name string, bind interface{}, layouts ...string) error {
 	buf := bytebufferpool.Get()
 	defer bytebufferpool.Put(buf)
 
-	if c.app.config.Views != nil {
-		// Render template from Views
-		if err := c.app.config.Views.Render(buf, name, bind, layouts...); err != nil {
-			return err
+	// Pass-locals-to-views & bind
+	c.renderExtensions(bind)
+
+	rendered := false
+	for prefix, app := range c.app.appList {
+		if prefix == "" || strings.Contains(c.OriginalURL(), prefix) {
+			if len(layouts) == 0 && app.config.ViewsLayout != "" {
+				layouts = []string{
+					app.config.ViewsLayout,
+				}
+			}
+
+			// Render template from Views
+			if app.config.Views != nil {
+				if err := app.config.Views.Render(buf, name, bind, layouts...); err != nil {
+					return err
+				}
+
+				rendered = true
+				break
+			}
 		}
-	} else {
+	}
+
+	if !rendered {
 		// Render raw template using 'name' as filepath if no engine is set
 		var tmpl *template.Template
 		if _, err = readContent(buf, name); err != nil {
 			return err
 		}
 		// Parse template
-		if tmpl, err = template.New("").Parse(getString(buf.Bytes())); err != nil {
+		if tmpl, err = template.New("").Parse(c.app.getString(buf.Bytes())); err != nil {
 			return err
 		}
 		buf.Reset()
@@ -880,12 +1172,36 @@ func (c *Ctx) Render(name string, bind interface{}, layouts ...string) error {
 			return err
 		}
 	}
+
 	// Set Content-Type to text/html
 	c.fasthttp.Response.Header.SetContentType(MIMETextHTMLCharsetUTF8)
 	// Set rendered template to body
 	c.fasthttp.Response.SetBody(buf.Bytes())
 	// Return err if exist
 	return err
+}
+
+func (c *Ctx) renderExtensions(bind interface{}) {
+	if bindMap, ok := bind.(Map); ok {
+		// Bind view map
+		if c.viewBindMap != nil {
+			for _, v := range c.viewBindMap.D {
+				bindMap[v.Key] = v.Value
+			}
+		}
+
+		// Check if the PassLocalsToViews option is enabled (by default it is disabled)
+		if c.app.config.PassLocalsToViews {
+			// Loop through each local and set it in the map
+			c.fasthttp.VisitUserValues(func(key []byte, val interface{}) {
+				// check if bindMap doesn't contain the key
+				if _, ok := bindMap[utils.UnsafeString(key)]; !ok {
+					// Set the key and value in the bindMap
+					bindMap[utils.UnsafeString(key)] = val
+				}
+			})
+		}
+	}
 }
 
 // Route returns the matched Route struct.
@@ -908,6 +1224,21 @@ func (c *Ctx) SaveFile(fileheader *multipart.FileHeader, path string) error {
 	return fasthttp.SaveMultipartFile(fileheader, path)
 }
 
+// SaveFileToStorage saves any multipart file to an external storage system.
+func (c *Ctx) SaveFileToStorage(fileheader *multipart.FileHeader, path string, storage Storage) error {
+	file, err := fileheader.Open()
+	if err != nil {
+		return err
+	}
+
+	content, err := ioutil.ReadAll(file)
+	if err != nil {
+		return err
+	}
+
+	return storage.Set(path, content, 0)
+}
+
 // Secure returns a boolean property, that is true, if a TLS connection is established.
 func (c *Ctx) Secure() bool {
 	return c.fasthttp.IsTLS()
@@ -921,9 +1252,11 @@ func (c *Ctx) Send(body []byte) error {
 	return nil
 }
 
-var sendFileOnce sync.Once
-var sendFileFS *fasthttp.FS
-var sendFileHandler fasthttp.RequestHandler
+var (
+	sendFileOnce    sync.Once
+	sendFileFS      *fasthttp.FS
+	sendFileHandler fasthttp.RequestHandler
+)
 
 // SendFile transfers the file from the given path.
 // The file is not compressed by default, enable this by passing a 'true' argument
@@ -952,7 +1285,7 @@ func (c *Ctx) SendFile(file string, compress ...bool) error {
 	// Keep original path for mutable params
 	c.pathOriginal = utils.CopyString(c.pathOriginal)
 	// Disable compression
-	if len(compress) <= 0 || !compress[0] {
+	if len(compress) == 0 || !compress[0] {
 		// https://github.com/valyala/fasthttp/blob/master/fs.go#L46
 		c.fasthttp.Request.Header.Del(HeaderAcceptEncoding)
 	}
@@ -967,6 +1300,9 @@ func (c *Ctx) SendFile(file string, compress ...bool) error {
 			file += "/"
 		}
 	}
+	// Restore the original requested URL
+	originalURL := c.OriginalURL()
+	defer c.fasthttp.Request.SetRequestURI(originalURL)
 	// Set new URI for fileHandler
 	c.fasthttp.Request.SetRequestURI(file)
 	// Save status code
@@ -1105,24 +1441,72 @@ func (c *Ctx) XHR() bool {
 	return utils.EqualFoldBytes(utils.UnsafeBytes(c.Get(HeaderXRequestedWith)), []byte("xmlhttprequest"))
 }
 
-// prettifyPath ...
-func (c *Ctx) prettifyPath() {
-	// If UnescapePath enabled, we decode the path
+// configDependentPaths set paths for route recognition and prepared paths for the user,
+// here the features for caseSensitive, decoded paths, strict paths are evaluated
+func (c *Ctx) configDependentPaths() {
+	c.pathBuffer = append(c.pathBuffer[0:0], c.pathOriginal...)
+	// If UnescapePath enabled, we decode the path and save it for the framework user
 	if c.app.config.UnescapePath {
 		c.pathBuffer = fasthttp.AppendUnquotedArg(c.pathBuffer[:0], c.pathBuffer)
 	}
+	c.path = c.app.getString(c.pathBuffer)
+
+	// another path is specified which is for routing recognition only
+	// use the path that was changed by the previous configuration flags
+	c.detectionPathBuffer = append(c.detectionPathBuffer[0:0], c.pathBuffer...)
 	// If CaseSensitive is disabled, we lowercase the original path
 	if !c.app.config.CaseSensitive {
-		c.pathBuffer = utils.ToLowerBytes(c.pathBuffer)
+		c.detectionPathBuffer = utils.ToLowerBytes(c.detectionPathBuffer)
 	}
 	// If StrictRouting is disabled, we strip all trailing slashes
-	if !c.app.config.StrictRouting && len(c.pathBuffer) > 1 && c.pathBuffer[len(c.pathBuffer)-1] == '/' {
-		c.pathBuffer = utils.TrimRightBytes(c.pathBuffer, '/')
+	if !c.app.config.StrictRouting && len(c.detectionPathBuffer) > 1 && c.detectionPathBuffer[len(c.detectionPathBuffer)-1] == '/' {
+		c.detectionPathBuffer = utils.TrimRightBytes(c.detectionPathBuffer, '/')
 	}
-	c.path = getString(c.pathBuffer)
+	c.detectionPath = c.app.getString(c.detectionPathBuffer)
 
+	// Define the path for dividing routes into areas for fast tree detection, so that fewer routes need to be traversed,
+	// since the first three characters area select a list of routes
 	c.treePath = c.treePath[0:0]
-	if len(c.path) >= 3 {
-		c.treePath = c.path[:3]
+	if len(c.detectionPath) >= 3 {
+		c.treePath = c.detectionPath[:3]
 	}
+}
+
+func (c *Ctx) IsProxyTrusted() bool {
+	if !c.app.config.EnableTrustedProxyCheck {
+		return true
+	}
+
+	_, trusted := c.app.config.trustedProxiesMap[c.fasthttp.RemoteIP().String()]
+	if trusted {
+		return trusted
+	}
+
+	for _, ipNet := range c.app.config.trustedProxyRanges {
+		if ipNet.Contains(c.fasthttp.RemoteIP()) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// IsLocalHost will return true if address is a localhost address.
+func (c *Ctx) isLocalHost(address string) bool {
+	localHosts := []string{"127.0.0.1", "0.0.0.0", "::1"}
+	for _, h := range localHosts {
+		if strings.Contains(address, h) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsFromLocal will return true if request came from local.
+func (c *Ctx) IsFromLocal() bool {
+	ips := c.IPs()
+	if len(ips) == 0 {
+		ips = append(ips, c.IP())
+	}
+	return c.isLocalHost(ips[0])
 }

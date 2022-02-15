@@ -27,7 +27,7 @@ func GenerateFiberApp() *fiber.App {
 	}))
 
 	app.Use(limiter.New(limiter.Config{
-		Max:        5,
+		Max:        20,
 		Expiration: 30 * time.Second,
 		KeyGenerator: func(c *fiber.Ctx) string {
 			return c.Get("x-forwarded-for")
@@ -41,7 +41,7 @@ func GenerateFiberApp() *fiber.App {
 }
 
 func RegisterRoutes(app *fiber.App) {
-	app.Get("/docs/*", swagger.Handler)
+	app.Get("/swagger/*", swagger.HandlerDefault) // default
 
 	auth := app.Group("/auth")
 	auth.Post("/login", handlers.Login)

@@ -7,6 +7,7 @@ Logger middleware for [Fiber](https://github.com/gofiber/fiber) that logs HTTP r
 	- [Signatures](#signatures)
 	- [Examples](#examples)
 		- [Default Config](#default-config)
+		- [Logging remote IP and Port](#logging-remote-ip-and-port)
 		- [Logging Request ID](#logging-request-id)
 		- [Changing TimeZone & TimeFormat](#changing-timezone--timeformat)
 		- [Custom File Writer](#custom-file-writer)
@@ -34,13 +35,21 @@ import (
 app.Use(logger.New())
 ```
 
+### Logging remote IP and Port
+
+```go
+app.Use(logger.New(logger.Config{
+        Format:     "[${ip}]:${port} ${status} - ${method} ${path}\n",
+}))
+```
+
 ### Logging Request ID
 ```go
 app.Use(requestid.New())
 
-​app​.​Use​(​logger​.​New​(logger.​Config​{
+app.Use(logger.New(logger.Config{
 	// For more options, see the Config section
-  Format​: "${pid} ${locals:requestid} ${status} - ${method} ${path}​\n​"​,
+	Format: "${pid} ${locals:requestid} ${status} - ${method} ${path}​\n",
 }))
 ```
 
@@ -96,7 +105,7 @@ type Config struct {
 	// Optional. Default: 500 * time.Millisecond
 	TimeInterval time.Duration
 
-	// Output is a writter where logs are written
+	// Output is a writer where logs are written
 	//
 	// Default: os.Stderr
 	Output io.Writer
@@ -119,39 +128,46 @@ var ConfigDefault = Config{
 ```go
 // Logger variables
 const (
-	TagPid           = "pid"
-	TagTime          = "time"
-	TagReferer       = "referer"
-	TagProtocol      = "protocol"
-	TagIP            = "ip"
-	TagIPs           = "ips"
-	TagHost          = "host"
-	TagMethod        = "method"
-	TagPath          = "path"
-	TagURL           = "url"
-	TagUA            = "ua"
-	TagLatency       = "latency"
-	TagStatus        = "status"        // response status
-	TagBody          = "body"          // request body
-	TagBytesSent     = "bytesSent"
-	TagBytesReceived = "bytesReceived"
-	TagRoute         = "route"
-	TagError         = "error"
-	TagHeader        = "header:"       // request header
-	TagQuery         = "query:"        // request query
-	TagForm          = "form:"         // request form
-	TagCookie        = "cookie:"       // request cookie
-	TagLocals        = "locals:"
+	TagPid					= "pid"
+	TagTime					= "time"
+	TagReferer				= "referer"
+	TagProtocol				= "protocol"
+	TagPort                                 = "port"
+	TagIP					= "ip"
+	TagIPs					= "ips"
+	TagHost					= "host"
+	TagMethod				= "method"
+	TagPath					= "path"
+	TagURL					= "url"
+	TagUA					= "ua"
+	TagLatency				= "latency"
+	TagStatus				= "status"	// response status
+	TagResBody				= "resBody"	// response body
+	TagReqHeaders                           = "reqHeaders"
+        TagQueryStringParams			= "queryParams"	// request query parameters
+        TagBody					= "body"	// request body
+	TagBytesSent				= "bytesSent"
+	TagBytesReceived			= "bytesReceived"
+	TagRoute				= "route"
+	TagError                		= "error"
+	// DEPRECATED: Use TagReqHeader instead
+	TagHeader               		= "header:"     // request header
+	TagReqHeader            		= "reqHeader:"  // request header
+	TagRespHeader           		= "respHeader:" // response header
+	TagQuery				= "query:"      // request query
+	TagForm					= "form:"       // request form
+	TagCookie				= "cookie:"     // request cookie
+	TagLocals				= "locals:"
 
 	// colors
-	TagBlack         = "black"
-	TagRed           = "red"
-	TagGreen         = "green"
-	TagYellow        = "yellow"
-	TagBlue          = "blue"
-	TagMagenta       = "magenta"
-	TagCyan          = "cyan"
-	TagWhite         = "white"
-	TagReset         = "reset"
+	TagBlack        			= "black"
+	TagRed           			= "red"
+	TagGreen        			= "green"
+	TagYellow        			= "yellow"
+	TagBlue          			= "blue"
+	TagMagenta       			= "magenta"
+	TagCyan          			= "cyan"
+	TagWhite         			= "white"
+	TagReset         			= "reset"
 )
 ```

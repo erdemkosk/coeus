@@ -6,24 +6,24 @@ package utils
 
 // ToLower is the equivalent of strings.ToLower
 func ToLower(b string) string {
-	var res = make([]byte, len(b))
+	res := make([]byte, len(b))
 	copy(res, b)
 	for i := 0; i < len(res); i++ {
 		res[i] = toLowerTable[res[i]]
 	}
 
-	return GetString(res)
+	return UnsafeString(res)
 }
 
 // ToUpper is the equivalent of strings.ToUpper
 func ToUpper(b string) string {
-	var res = make([]byte, len(b))
+	res := make([]byte, len(b))
 	copy(res, b)
 	for i := 0; i < len(res); i++ {
 		res[i] = toUpperTable[res[i]]
 	}
 
-	return GetString(res)
+	return UnsafeString(res)
 }
 
 // TrimLeft is the equivalent of strings.TrimLeft
@@ -43,7 +43,7 @@ func Trim(s string, cutset byte) string {
 			break
 		}
 	}
-	for ; i < j; j-- {
+	for ; i <= j; j-- {
 		if s[j] != cutset {
 			break
 		}

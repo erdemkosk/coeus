@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/gofiber/fiber/v2/utils"
@@ -35,13 +36,17 @@ type Router interface {
 
 	Group(prefix string, handlers ...Handler) Router
 
+	Route(prefix string, fn func(router Router), name ...string) Router
+
 	Mount(prefix string, fiber *App) Router
+
+	Name(name string) Router
 }
 
 // Route is a struct that holds all metadata for each registered handler
 type Route struct {
 	// Data for routing
-	pos         int         // Position in stack -> important for the sort of the matched routes
+	pos         uint32      // Position in stack -> important for the sort of the matched routes
 	use         bool        // USE matches path prefixes
 	star        bool        // Path equals '*'
 	root        bool        // Path equals '/'
@@ -50,19 +55,20 @@ type Route struct {
 
 	// Public fields
 	Method   string    `json:"method"` // HTTP method
+	Name     string    `json:"name"`   // Route's name
 	Path     string    `json:"path"`   // Original registered route path
 	Params   []string  `json:"params"` // Case sensitive param keys
 	Handlers []Handler `json:"-"`      // Ctx handlers
 }
 
-func (r *Route) match(path, original string, params *[maxParams]string) (match bool) {
-	// root path check
-	if r.root && path == "/" {
+func (r *Route) match(detectionPath, path string, params *[maxParams]string) (match bool) {
+	// root detectionPath check
+	if r.root && detectionPath == "/" {
 		return true
-		// '*' wildcard matches any path
+		// '*' wildcard matches any detectionPath
 	} else if r.star {
-		if len(original) > 1 {
-			params[0] = original[1:]
+		if len(path) > 1 {
+			params[0] = path[1:]
 		} else {
 			params[0] = ""
 		}
@@ -71,19 +77,19 @@ func (r *Route) match(path, original string, params *[maxParams]string) (match b
 	// Does this route have parameters
 	if len(r.Params) > 0 {
 		// Match params
-		if match := r.routeParser.getMatch(path, original, params, r.use); match {
-			// Get params from the original path
+		if match := r.routeParser.getMatch(detectionPath, path, params, r.use); match {
+			// Get params from the path detectionPath
 			return match
 		}
 	}
 	// Is this route a Middleware?
 	if r.use {
-		// Single slash will match or path prefix
-		if r.root || strings.HasPrefix(path, r.path) {
+		// Single slash will match or detectionPath prefix
+		if r.root || strings.HasPrefix(detectionPath, r.path) {
 			return true
 		}
-		// Check for a simple path match
-	} else if len(r.path) == len(path) && r.path == path {
+		// Check for a simple detectionPath match
+	} else if len(r.path) == len(detectionPath) && r.path == detectionPath {
 		return true
 	}
 	// No match
@@ -107,7 +113,7 @@ func (app *App) next(c *Ctx) (match bool, err error) {
 		route := tree[c.indexRoute]
 
 		// Check if it matches the request path
-		match = route.match(c.path, c.pathOriginal, &c.values)
+		match = route.match(c.detectionPath, c.path, &c.values)
 
 		// No match, next route
 		if !match {
@@ -153,7 +159,7 @@ func (app *App) handler(rctx *fasthttp.RequestCtx) {
 	// Find match in stack
 	match, err := app.next(c)
 	if err != nil {
-		if catch := c.app.config.ErrorHandler(c, err); catch != nil {
+		if catch := c.app.ErrorHandler(c, err); catch != nil {
 			_ = c.SendStatus(StatusInternalServerError)
 		}
 	}
@@ -178,7 +184,7 @@ func (app *App) addPrefixToRoute(prefix string, route *Route) *Route {
 	}
 
 	route.Path = prefixedPath
-	route.path = prettyPath
+	route.path = RemoveEscapeChar(prettyPath)
 	route.routeParser = parseRoute(prettyPath)
 	route.root = false
 	route.star = false
@@ -199,7 +205,7 @@ func (app *App) copyRoute(route *Route) *Route {
 		Params:      route.Params,
 
 		// Public data
-		Path:     route.path,
+		Path:     route.Path,
 		Method:   route.Method,
 		Handlers: route.Handlers,
 	}
@@ -235,14 +241,14 @@ func (app *App) register(method, pathRaw string, handlers ...Handler) Router {
 		pathPretty = utils.TrimRight(pathPretty, '/')
 	}
 	// Is layer a middleware?
-	var isUse = method == methodUse
+	isUse := method == methodUse
 	// Is path a direct wildcard?
-	var isStar = pathPretty == "/*"
+	isStar := pathPretty == "/*"
 	// Is path a root slash?
-	var isRoot = pathPretty == "/"
+	isRoot := pathPretty == "/"
 	// Parse path parameters
-	var parsedRaw = parseRoute(pathRaw)
-	var parsedPretty = parseRoute(pathPretty)
+	parsedRaw := parseRoute(pathRaw)
+	parsedPretty := parseRoute(pathPretty)
 
 	// Create route metadata without pointer
 	route := Route{
@@ -252,7 +258,7 @@ func (app *App) register(method, pathRaw string, handlers ...Handler) Router {
 		root: isRoot,
 
 		// Path data
-		path:        pathPretty,
+		path:        RemoveEscapeChar(pathPretty),
 		routeParser: parsedPretty,
 		Params:      parsedRaw.params,
 
@@ -262,9 +268,7 @@ func (app *App) register(method, pathRaw string, handlers ...Handler) Router {
 		Handlers: handlers,
 	}
 	// Increment global handler count
-	app.mutex.Lock()
-	app.handlerCount += len(handlers)
-	app.mutex.Unlock()
+	atomic.AddUint32(&app.handlersCount, uint32(len(handlers)))
 
 	// Middleware route matches all HTTP methods
 	if isUse {
@@ -283,7 +287,7 @@ func (app *App) register(method, pathRaw string, handlers ...Handler) Router {
 
 func (app *App) registerStatic(prefix, root string, config ...Static) Router {
 	// For security we want to restrict to the current work directory.
-	if len(root) == 0 {
+	if root == "" {
 		root = "."
 	}
 	// Cannot have an empty prefix
@@ -303,9 +307,9 @@ func (app *App) registerStatic(prefix, root string, config ...Static) Router {
 		root = root[:len(root)-1]
 	}
 	// Is prefix a direct wildcard?
-	var isStar = prefix == "/*"
+	isStar := prefix == "/*"
 	// Is prefix a root slash?
-	var isRoot = prefix == "/"
+	isRoot := prefix == "/"
 	// Is prefix a partial wildcard?
 	if strings.Contains(prefix, "*") {
 		// /john* -> /john
@@ -314,6 +318,11 @@ func (app *App) registerStatic(prefix, root string, config ...Static) Router {
 		// Fix this later
 	}
 	prefixLen := len(prefix)
+	if prefixLen > 1 && prefix[prefixLen-1:] == "/" {
+		// /john/ -> /john
+		prefixLen--
+		prefix = prefix[:prefixLen]
+	}
 	// Fileserver settings
 	fs := &fasthttp.FS{
 		Root:                 root,
@@ -326,10 +335,13 @@ func (app *App) registerStatic(prefix, root string, config ...Static) Router {
 		PathRewrite: func(fctx *fasthttp.RequestCtx) []byte {
 			path := fctx.Path()
 			if len(path) >= prefixLen {
-				if isStar && getString(path[0:prefixLen]) == prefix {
+				if isStar && app.getString(path[0:prefixLen]) == prefix {
 					path = append(path[0:0], '/')
-				} else if len(path) > 0 && path[len(path)-1] != '/' {
-					path = append(path[prefixLen:], '/')
+				} else {
+					path = path[prefixLen:]
+					if len(path) == 0 || path[len(path)-1] != '/' {
+						path = append(path, '/')
+					}
 				}
 			}
 			if len(path) > 0 && path[0] != '/' {
@@ -359,8 +371,16 @@ func (app *App) registerStatic(prefix, root string, config ...Static) Router {
 	}
 	fileHandler := fs.NewRequestHandler()
 	handler := func(c *Ctx) error {
+		// Don't execute middleware if Next returns true
+		if len(config) != 0 && config[0].Next != nil && config[0].Next(c) {
+			return c.Next()
+		}
 		// Serve file
 		fileHandler(c.fasthttp)
+		// Sets the response Content-Disposition header to attachment if the Download option is true
+		if len(config) > 0 && config[0].Download {
+			c.Attachment()
+		}
 		// Return request if found and not forbidden
 		status := c.fasthttp.Response.StatusCode()
 		if status != StatusNotFound && status != StatusForbidden {
@@ -389,9 +409,7 @@ func (app *App) registerStatic(prefix, root string, config ...Static) Router {
 		Handlers: []Handler{handler},
 	}
 	// Increment global handler count
-	app.mutex.Lock()
-	app.handlerCount++
-	app.mutex.Unlock()
+	atomic.AddUint32(&app.handlersCount, 1)
 	// Add route to stack
 	app.addRoute(MethodGet, &route)
 	// Add HEAD route
@@ -400,7 +418,7 @@ func (app *App) registerStatic(prefix, root string, config ...Static) Router {
 }
 
 func (app *App) addRoute(method string, route *Route) {
-	// Get unique HTTP method indentifier
+	// Get unique HTTP method identifier
 	m := methodInt(method)
 
 	// prevent identically route registration
@@ -410,20 +428,23 @@ func (app *App) addRoute(method string, route *Route) {
 		preRoute.Handlers = append(preRoute.Handlers, route.Handlers...)
 	} else {
 		// Increment global route position
-		app.mutex.Lock()
-		app.routesCount++
-		app.mutex.Unlock()
-		route.pos = app.routesCount
+		route.pos = atomic.AddUint32(&app.routesCount, 1)
 		route.Method = method
 		// Add route to the stack
 		app.stack[m] = append(app.stack[m], route)
+		app.routesRefreshed = true
 	}
-	// Build router tree
-	app.buildTree()
+
+	latestRoute.mu.Lock()
+	latestRoute.route = route
+	latestRoute.mu.Unlock()
 }
 
 // buildTree build the prefix tree from the previously registered routes
 func (app *App) buildTree() *App {
+	if !app.routesRefreshed {
+		return app
+	}
 	// loop all the methods and stacks and create the prefix tree
 	for m := range intMethod {
 		app.treeStack[m] = make(map[string][]*Route)
@@ -449,6 +470,7 @@ func (app *App) buildTree() *App {
 			})
 		}
 	}
+	app.routesRefreshed = false
 
 	return app
 }

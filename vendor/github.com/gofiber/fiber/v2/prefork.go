@@ -19,17 +19,15 @@ const (
 	envPreforkChildVal = "1"
 )
 
-var (
-	testPreforkMaster = false
-)
+var testPreforkMaster = false
 
-// IsChild determines if the current process is a result of Prefork
+// IsChild determines if the current process is a child of Prefork
 func IsChild() bool {
 	return os.Getenv(envPreforkChildKey) == envPreforkChildVal
 }
 
 // prefork manages child processes to make use of the OS REUSEPORT or REUSEADDR feature
-func (app *App) prefork(addr string, tlsConfig *tls.Config) (err error) {
+func (app *App) prefork(network, addr string, tlsConfig *tls.Config) (err error) {
 	// 👶 child process 👶
 	if IsChild() {
 		// use 1 cpu core per child process
@@ -37,7 +35,7 @@ func (app *App) prefork(addr string, tlsConfig *tls.Config) (err error) {
 		var ln net.Listener
 		// Linux will use SO_REUSEPORT and Windows falls back to SO_REUSEADDR
 		// Only tcp4 or tcp6 is supported when preforking, both are not supported
-		if ln, err = reuseport.Listen("tcp4", addr); err != nil {
+		if ln, err = reuseport.Listen(network, addr); err != nil {
 			if !app.config.DisableStartupMessage {
 				time.Sleep(100 * time.Millisecond) // avoid colliding with startup message
 			}
@@ -51,6 +49,9 @@ func (app *App) prefork(addr string, tlsConfig *tls.Config) (err error) {
 		// kill current child proc when master exits
 		go watchMaster()
 
+		// prepare the server for the start
+		app.startupProcess()
+
 		// listen for incoming connections
 		return app.server.Serve(ln)
 	}
@@ -61,9 +62,9 @@ func (app *App) prefork(addr string, tlsConfig *tls.Config) (err error) {
 		err error
 	}
 	// create variables
-	var max = runtime.GOMAXPROCS(0)
-	var childs = make(map[int]*exec.Cmd)
-	var channel = make(chan child, max)
+	max := runtime.GOMAXPROCS(0)
+	childs := make(map[int]*exec.Cmd)
+	channel := make(chan child, max)
 
 	// kill child procs when master exits
 	defer func() {
@@ -78,7 +79,7 @@ func (app *App) prefork(addr string, tlsConfig *tls.Config) (err error) {
 	// launch child procs
 	for i := 0; i < max; i++ {
 		/* #nosec G204 */
-		cmd := exec.Command(os.Args[0], os.Args[1:]...)
+		cmd := exec.Command(os.Args[0], os.Args[1:]...) // #nosec G204
 		if testPreforkMaster {
 			// When test prefork master,
 			// just start the child process with a dummy cmd,

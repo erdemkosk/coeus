@@ -20,3 +20,9 @@ type Config struct {
 	Type      string             `bson:"type"`
 	Value     interface{}        `bson:"value"`
 }
+
+type ConfigFormatted struct {
+    Key       string             `bson:"key"`
+	Type      string             `bson:"type"`
+	Value     interface{}        `bson:"value"`
+}

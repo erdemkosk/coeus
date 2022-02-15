@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -25,7 +26,7 @@ import (
 
 /* #nosec */
 // lnMetadata will close the listener and return the addr and tls config
-func lnMetadata(ln net.Listener) (addr string, cfg *tls.Config) {
+func lnMetadata(network string, ln net.Listener) (addr string, cfg *tls.Config) {
 	// Get addr
 	addr = ln.Addr().String()
 
@@ -37,7 +38,7 @@ func lnMetadata(ln net.Listener) (addr string, cfg *tls.Config) {
 	// Wait for the listener to be closed
 	var closed bool
 	for i := 0; i < 10; i++ {
-		conn, err := net.DialTimeout("tcp4", addr, 3*time.Second)
+		conn, err := net.DialTimeout(network, addr, 3*time.Second)
 		if err != nil || conn == nil {
 			closed = true
 			break
@@ -49,6 +50,14 @@ func lnMetadata(ln net.Listener) (addr string, cfg *tls.Config) {
 		panic("listener: " + addr + ": Only one usage of each socket address (protocol/network address/port) is normally permitted.")
 	}
 
+	cfg = getTlsConfig(ln)
+
+	return
+}
+
+/* #nosec */
+// getTlsConfig returns a net listener's tls config
+func getTlsConfig(ln net.Listener) *tls.Config {
 	// Get listener type
 	pointer := reflect.ValueOf(ln)
 
@@ -59,17 +68,19 @@ func lnMetadata(ln net.Listener) (addr string, cfg *tls.Config) {
 			// Get private field from value
 			if field := val.FieldByName("config"); field.Type() != nil {
 				// Copy value from pointer field (unsafe)
-				if newval := reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())); newval.Type() != nil {
+				newval := reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())) // #nosec G103
+				if newval.Type() != nil {
 					// Get element from pointer
 					if elem := newval.Elem(); elem.Type() != nil {
 						// Cast value to *tls.Config
-						cfg = elem.Interface().(*tls.Config)
+						return elem.Interface().(*tls.Config)
 					}
 				}
 			}
 		}
 	}
-	return
+
+	return nil
 }
 
 // readContent opens a named file and read content from it
@@ -79,17 +90,20 @@ func readContent(rf io.ReaderFrom, name string) (n int64, err error) {
 	if err != nil {
 		return 0, err
 	}
+	// #nosec G307
 	defer func() {
-		err = f.Close()
+		if err = f.Close(); err != nil {
+			log.Printf("Error closing file: %s\n", err)
+		}
 	}()
 	return rf.ReadFrom(f)
 }
 
 // quoteString escape special characters in a given string
-func quoteString(raw string) string {
+func (app *App) quoteString(raw string) string {
 	bb := bytebufferpool.Get()
 	// quoted := string(fasthttp.AppendQuotedArg(bb.B, getBytes(raw)))
-	quoted := getString(fasthttp.AppendQuotedArg(bb.B, getBytes(raw)))
+	quoted := app.getString(fasthttp.AppendQuotedArg(bb.B, app.getBytes(raw)))
 	bytebufferpool.Put(bb)
 	return quoted
 }
@@ -109,7 +123,7 @@ func methodExist(ctx *Ctx) (exist bool) {
 		}
 		// Get stack length
 		lenr := len(tree) - 1
-		//Loop over the route stack starting from previous index
+		// Loop over the route stack starting from previous index
 		for ctx.indexRoute < lenr {
 			// Increment route index
 			ctx.indexRoute++
@@ -120,7 +134,7 @@ func methodExist(ctx *Ctx) (exist bool) {
 				continue
 			}
 			// Check if it matches the request path
-			match := route.match(ctx.path, ctx.pathOriginal, &ctx.values)
+			match := route.match(ctx.detectionPath, ctx.path, &ctx.values)
 			// No match, next route
 			if match {
 				// We matched
@@ -169,7 +183,7 @@ func setETag(c *Ctx, weak bool) {
 	}
 	body := c.fasthttp.Response.Body()
 	// Skips ETag if no response body is present
-	if len(body) <= 0 {
+	if len(body) == 0 {
 		return
 	}
 	// Get ETag header from request
@@ -208,9 +222,14 @@ func setETag(c *Ctx, weak bool) {
 }
 
 func getGroupPath(prefix, path string) string {
-	if path == "/" {
+	if len(path) == 0 || path == "/" {
 		return prefix
 	}
+
+	if path[0] != '/' {
+		path = "/" + path
+	}
+
 	return utils.TrimRight(prefix, '/') + path
 }
 
@@ -258,7 +277,7 @@ func matchEtag(s string, etag string) bool {
 	return false
 }
 
-func isEtagStale(etag string, noneMatchBytes []byte) bool {
+func (app *App) isEtagStale(etag string, noneMatchBytes []byte) bool {
 	var start, end int
 
 	// Adapted from:
@@ -271,7 +290,7 @@ func isEtagStale(etag string, noneMatchBytes []byte) bool {
 				end = i + 1
 			}
 		case 0x2c:
-			if matchEtag(getString(noneMatchBytes[start:end]), etag) {
+			if matchEtag(app.getString(noneMatchBytes[start:end]), etag) {
 				return false
 			}
 			start = i + 1
@@ -281,7 +300,7 @@ func isEtagStale(etag string, noneMatchBytes []byte) bool {
 		}
 	}
 
-	return !matchEtag(getString(noneMatchBytes[start:end]), etag)
+	return !matchEtag(app.getString(noneMatchBytes[start:end]), etag)
 }
 
 func parseAddr(raw string) (host, port string) {
@@ -326,6 +345,7 @@ type testAddr string
 func (a testAddr) Network() string {
 	return string(a)
 }
+
 func (a testAddr) String() string {
 	return string(a)
 }
@@ -345,14 +365,10 @@ func (c *testConn) SetDeadline(_ time.Time) error      { return nil }
 func (c *testConn) SetReadDeadline(_ time.Time) error  { return nil }
 func (c *testConn) SetWriteDeadline(_ time.Time) error { return nil }
 
-// getString converts byte slice to a string without memory allocation.
-var getString = utils.UnsafeString
 var getStringImmutable = func(b []byte) string {
 	return string(b)
 }
 
-// getBytes converts string to a byte slice without memory allocation.
-var getBytes = utils.UnsafeBytes
 var getBytesImmutable = func(s string) (b []byte) {
 	return []byte(s)
 }
@@ -620,48 +636,74 @@ const (
 	HeaderContentSecurityPolicyReportOnly = "Content-Security-Policy-Report-Only"
 	HeaderCrossOriginResourcePolicy       = "Cross-Origin-Resource-Policy"
 	HeaderExpectCT                        = "Expect-CT"
-	HeaderFeaturePolicy                   = "Feature-Policy"
-	HeaderPublicKeyPins                   = "Public-Key-Pins"
-	HeaderPublicKeyPinsReportOnly         = "Public-Key-Pins-Report-Only"
-	HeaderStrictTransportSecurity         = "Strict-Transport-Security"
-	HeaderUpgradeInsecureRequests         = "Upgrade-Insecure-Requests"
-	HeaderXContentTypeOptions             = "X-Content-Type-Options"
-	HeaderXDownloadOptions                = "X-Download-Options"
-	HeaderXFrameOptions                   = "X-Frame-Options"
-	HeaderXPoweredBy                      = "X-Powered-By"
-	HeaderXXSSProtection                  = "X-XSS-Protection"
-	HeaderLastEventID                     = "Last-Event-ID"
-	HeaderNEL                             = "NEL"
-	HeaderPingFrom                        = "Ping-From"
-	HeaderPingTo                          = "Ping-To"
-	HeaderReportTo                        = "Report-To"
-	HeaderTE                              = "TE"
-	HeaderTrailer                         = "Trailer"
-	HeaderTransferEncoding                = "Transfer-Encoding"
-	HeaderSecWebSocketAccept              = "Sec-WebSocket-Accept"
-	HeaderSecWebSocketExtensions          = "Sec-WebSocket-Extensions"
-	HeaderSecWebSocketKey                 = "Sec-WebSocket-Key"
-	HeaderSecWebSocketProtocol            = "Sec-WebSocket-Protocol"
-	HeaderSecWebSocketVersion             = "Sec-WebSocket-Version"
-	HeaderAcceptPatch                     = "Accept-Patch"
-	HeaderAcceptPushPolicy                = "Accept-Push-Policy"
-	HeaderAcceptSignature                 = "Accept-Signature"
-	HeaderAltSvc                          = "Alt-Svc"
-	HeaderDate                            = "Date"
-	HeaderIndex                           = "Index"
-	HeaderLargeAllocation                 = "Large-Allocation"
-	HeaderLink                            = "Link"
-	HeaderPushPolicy                      = "Push-Policy"
-	HeaderRetryAfter                      = "Retry-After"
-	HeaderServerTiming                    = "Server-Timing"
-	HeaderSignature                       = "Signature"
-	HeaderSignedHeaders                   = "Signed-Headers"
-	HeaderSourceMap                       = "SourceMap"
-	HeaderUpgrade                         = "Upgrade"
-	HeaderXDNSPrefetchControl             = "X-DNS-Prefetch-Control"
-	HeaderXPingback                       = "X-Pingback"
-	HeaderXRequestID                      = "X-Request-ID"
-	HeaderXRequestedWith                  = "X-Requested-With"
-	HeaderXRobotsTag                      = "X-Robots-Tag"
-	HeaderXUACompatible                   = "X-UA-Compatible"
+	// Deprecated: use HeaderPermissionsPolicy instead
+	HeaderFeaturePolicy           = "Feature-Policy"
+	HeaderPermissionsPolicy       = "Permissions-Policy"
+	HeaderPublicKeyPins           = "Public-Key-Pins"
+	HeaderPublicKeyPinsReportOnly = "Public-Key-Pins-Report-Only"
+	HeaderStrictTransportSecurity = "Strict-Transport-Security"
+	HeaderUpgradeInsecureRequests = "Upgrade-Insecure-Requests"
+	HeaderXContentTypeOptions     = "X-Content-Type-Options"
+	HeaderXDownloadOptions        = "X-Download-Options"
+	HeaderXFrameOptions           = "X-Frame-Options"
+	HeaderXPoweredBy              = "X-Powered-By"
+	HeaderXXSSProtection          = "X-XSS-Protection"
+	HeaderLastEventID             = "Last-Event-ID"
+	HeaderNEL                     = "NEL"
+	HeaderPingFrom                = "Ping-From"
+	HeaderPingTo                  = "Ping-To"
+	HeaderReportTo                = "Report-To"
+	HeaderTE                      = "TE"
+	HeaderTrailer                 = "Trailer"
+	HeaderTransferEncoding        = "Transfer-Encoding"
+	HeaderSecWebSocketAccept      = "Sec-WebSocket-Accept"
+	HeaderSecWebSocketExtensions  = "Sec-WebSocket-Extensions"
+	HeaderSecWebSocketKey         = "Sec-WebSocket-Key"
+	HeaderSecWebSocketProtocol    = "Sec-WebSocket-Protocol"
+	HeaderSecWebSocketVersion     = "Sec-WebSocket-Version"
+	HeaderAcceptPatch             = "Accept-Patch"
+	HeaderAcceptPushPolicy        = "Accept-Push-Policy"
+	HeaderAcceptSignature         = "Accept-Signature"
+	HeaderAltSvc                  = "Alt-Svc"
+	HeaderDate                    = "Date"
+	HeaderIndex                   = "Index"
+	HeaderLargeAllocation         = "Large-Allocation"
+	HeaderLink                    = "Link"
+	HeaderPushPolicy              = "Push-Policy"
+	HeaderRetryAfter              = "Retry-After"
+	HeaderServerTiming            = "Server-Timing"
+	HeaderSignature               = "Signature"
+	HeaderSignedHeaders           = "Signed-Headers"
+	HeaderSourceMap               = "SourceMap"
+	HeaderUpgrade                 = "Upgrade"
+	HeaderXDNSPrefetchControl     = "X-DNS-Prefetch-Control"
+	HeaderXPingback               = "X-Pingback"
+	HeaderXRequestID              = "X-Request-ID"
+	HeaderXRequestedWith          = "X-Requested-With"
+	HeaderXRobotsTag              = "X-Robots-Tag"
+	HeaderXUACompatible           = "X-UA-Compatible"
+)
+
+// Network types that are commonly used
+const (
+	NetworkTCP  = "tcp"
+	NetworkTCP4 = "tcp4"
+	NetworkTCP6 = "tcp6"
+)
+
+// Compression types
+const (
+	StrGzip    = "gzip"
+	StrBr      = "br"
+	StrDeflate = "deflate"
+	StrBrotli  = "brotli"
+)
+
+// Cookie SameSite
+// https://datatracker.ietf.org/doc/html/draft-ietf-httpbis-rfc6265bis-03#section-4.1.2.7
+const (
+	CookieSameSiteDisabled   = "disabled" // not in RFC, just control "SameSite" attribute will not be set.
+	CookieSameSiteLaxMode    = "lax"
+	CookieSameSiteStrictMode = "strict"
+	CookieSameSiteNoneMode   = "none"
 )

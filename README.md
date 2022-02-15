@@ -43,6 +43,13 @@ For Make A Docker Image:
 $ docker build -t  go-config-server .
 $ docker run --env-file .env -p 4000:4000 go-config-server
 ```
+### Install ✨
+
+```sh
+$ go mod vendor
+$ go get -u github.com/swaggo/swag/cmd/swag
+$ $HOME/go/bin/swag init
+```
 
 ### Env Variables✨
 

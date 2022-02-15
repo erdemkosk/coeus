@@ -2,27 +2,19 @@ basePath: /
 definitions:
   models.AuthToken:
     properties:
-      data:
-        type: object
+      data: {}
       message:
         type: string
       success:
         type: boolean
     type: object
-  models.Config:
+  models.ConfigFormatted:
     properties:
-      createdAt:
-        type: string
-      id:
-        type: string
       key:
         type: string
       type:
         type: string
-      updatedAt:
-        type: string
-      value:
-        type: object
+      value: {}
     type: object
   models.ConfigInput:
     properties:
@@ -30,8 +22,25 @@ definitions:
         type: string
       type:
         type: string
-      value:
-        type: object
+      value: {}
+    type: object
+  models.ConfigUpdate:
+    properties:
+      type:
+        type: string
+      value: {}
+    type: object
+  models.ExampleGetConfig:
+    properties:
+      config:
+        $ref: '#/definitions/models.ConfigFormatted'
+      success:
+        type: boolean
+    type: object
+  models.ExampleSuccessConfig:
+    properties:
+      success:
+        type: boolean
     type: object
   models.LoginInput:
     properties:
@@ -55,7 +64,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: Create config with using key
+      description: Create config with using key type
       parameters:
       - description: Config Value
         in: body
@@ -69,10 +78,10 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Config'
+            $ref: '#/definitions/models.ExampleSuccessConfig'
       security:
       - Authorization: []
-      summary: Create config with using key
+      summary: Create config with using key and type
       tags:
       - config
   /api/config/{key}:
@@ -92,7 +101,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Config'
+            $ref: '#/definitions/models.ExampleSuccessConfig'
       security:
       - Authorization: []
       summary: Delete config with using key
@@ -125,7 +134,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Config'
+            $ref: '#/definitions/models.ExampleGetConfig'
       security:
       - Authorization: []
       summary: Get config with using key
@@ -146,14 +155,14 @@ paths:
         name: data
         required: true
         schema:
-          $ref: '#/definitions/models.ConfigInput'
+          $ref: '#/definitions/models.ConfigUpdate'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Config'
+            $ref: '#/definitions/models.ExampleSuccessConfig'
       security:
       - Authorization: []
       summary: Update config with using key

@@ -26,7 +26,7 @@ const (
 // @Produce json
 // @Param key path string true "Config key value"
 // @Param types query string true "type" Enums(Array, Boolean, Object, String, Number)
-// @Success 200 {object} models.Config{}
+// @Success 200 {object} models.ExampleGetConfig{}
 // @Security Authorization
 // @Router /api/config/{key} [get]
 func GetConfig(c *fiber.Ctx) error {
@@ -50,21 +50,26 @@ func GetConfig(c *fiber.Ctx) error {
 			"error":   ERROR_CONNOT_FIND,
 		})
 	}
+	
+	configFormatted := models.ConfigFormatted{
+		Key:    config.Key,
+		Type:   config.Type,
+		Value:  config.Value,
+	}
 
 	return c.Status(200).JSON(&fiber.Map{
 		"success": true,
-		"config":  config,
+		"config":  configFormatted,
 	})
 }
 
-// CreateConfig is a function to get a book by ID
-// @Summary Create config with using key
-// @Description Create config with using key
+// @Summary Create config with using key and type
+// @Description Create config with using key type
 // @Tags config
 // @Accept json
 // @Produce json
 // @Param data body models.ConfigInput true "Config Value"
-// @Success 200 {object} models.Config{}
+// @Success 200 {object} models.ExampleSuccessConfig{}
 // @Security Authorization
 // @Router /api/config/ [post]
 func CreateConfig(c *fiber.Ctx) error {
@@ -109,15 +114,14 @@ func CreateConfig(c *fiber.Ctx) error {
 	})
 }
 
-// UpdateConfig is a function to get a book by ID
 // @Summary Update config with using key
 // @Description Update config with using key
 // @Tags config
 // @Accept json
 // @Produce json
 // @Param key path string true "Config key value"
-// @Param data body models.ConfigInput true "Config Value"
-// @Success 200 {object} models.Config{}
+// @Param data body models.ConfigUpdate true "Config Value"
+// @Success 200 {object} models.ExampleSuccessConfig{}
 // @Security Authorization
 // @Router /api/config/{key} [put]
 func UpdateConfig(c *fiber.Ctx) error {
@@ -137,7 +141,7 @@ func UpdateConfig(c *fiber.Ctx) error {
 		})
 	}
 
-	config := models.Config{Id: primitive.NewObjectID(), Key: userConfig.Key, Type: userConfig.Type, Value: userConfig.Value, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	config := models.Config{Id: primitive.NewObjectID(), Key: key, Type: userConfig.Type, Value: userConfig.Value, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	result, err := services.UpdateConfig(key, config)
 
 	if err != nil {
@@ -153,14 +157,13 @@ func UpdateConfig(c *fiber.Ctx) error {
 	})
 }
 
-// DeleteConfig is a function to get a book by ID
 // @Summary Delete config with using key
 // @Description Delete config with using key
 // @Tags config
 // @Accept json
 // @Produce json
 // @Param key path string true "Config key value"
-// @Success 200 {object} models.Config{}
+// @Success 200 {object} models.ExampleSuccessConfig{}
 // @Security Authorization
 // @Router /api/config/{key} [delete]
 func DeleteConfig(c *fiber.Ctx) error {
