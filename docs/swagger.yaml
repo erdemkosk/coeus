@@ -37,6 +37,15 @@ definitions:
       success:
         type: boolean
     type: object
+  models.ExampleGetConfigs:
+    properties:
+      config:
+        items:
+          $ref: '#/definitions/models.ConfigFormatted'
+        type: array
+      success:
+        type: boolean
+    type: object
   models.ExampleSuccessConfig:
     properties:
       success:
@@ -61,6 +70,22 @@ info:
   version: 1.0.0
 paths:
   /api/config/:
+    get:
+      consumes:
+      - application/json
+      description: Get configs
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ExampleGetConfigs'
+      security:
+      - Authorization: []
+      summary: Get configs
+      tags:
+      - config
     post:
       consumes:
       - application/json

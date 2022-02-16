@@ -27,6 +27,11 @@ type ExampleGetConfig struct {
 	Config ConfigFormatted 
 }
 
+type ExampleGetConfigs struct {
+	Success bool `json:"success"`
+	Config []ConfigFormatted 
+}
+
 type ExampleSuccessConfig struct {
 	Success bool `json:"success"`
 }

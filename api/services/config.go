@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"time"
+	"encoding/json"
 
 	mongo "github.com/erdemkosk/go-config-service/api/db"
 	models "github.com/erdemkosk/go-config-service/api/models"
@@ -32,10 +33,49 @@ func GetConfig(types string, key string) (models.Config, error) {
 
 	collection := client.Database(mongo.DB).Collection(mongo.COLLECTION)
 
-	err = collection.FindOne(context.TODO(), filter).Decode(&result)
+	tempResult := bson.M{}
+
+	err = collection.FindOne(context.TODO(), filter).Decode(&tempResult)
 	if err != nil {
 		return result, err
 	}
+
+	obj, err := json.Marshal(tempResult)
+       
+    err = json.Unmarshal(obj, &result)
+		
+
+	return result, nil
+}
+
+func GetConfigs() ([]models.Config, error) {
+	result := []models.Config{}
+
+	filter := bson.D{{}}
+
+	client, err := mongo.GetMongoClient()
+	if err != nil {
+		return result, err
+	}
+
+	collection := client.Database(mongo.DB).Collection(mongo.COLLECTION)
+
+	cursor, err := collection.Find(context.TODO(), filter)
+	if err != nil {
+		return result, err
+	}
+
+	tempResult := []bson.M{}
+
+	if err := cursor.All(context.TODO(), &tempResult); err != nil {
+		return result, err
+	}
+
+	obj, err := json.Marshal(tempResult)
+       
+        
+    err = json.Unmarshal(obj, &result)
+
 
 	return result, nil
 }

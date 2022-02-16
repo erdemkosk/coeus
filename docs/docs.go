@@ -24,6 +24,32 @@ const docTemplate_swagger = `{
     "basePath": "{{.BasePath}}",
     "paths": {
         "/api/config/": {
+            "get": {
+                "security": [
+                    {
+                        "Authorization": []
+                    }
+                ],
+                "description": "Get configs",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "config"
+                ],
+                "summary": "Get configs",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ExampleGetConfigs"
+                        }
+                    }
+                }
+            },
             "post": {
                 "security": [
                     {
@@ -278,6 +304,20 @@ const docTemplate_swagger = `{
             "properties": {
                 "config": {
                     "$ref": "#/definitions/models.ConfigFormatted"
+                },
+                "success": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "models.ExampleGetConfigs": {
+            "type": "object",
+            "properties": {
+                "config": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ConfigFormatted"
+                    }
                 },
                 "success": {
                     "type": "boolean"

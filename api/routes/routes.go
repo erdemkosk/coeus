@@ -6,7 +6,6 @@ import (
 	handlers "github.com/erdemkosk/go-config-service/api/handlers"
 
 	swagger "github.com/arsmn/fiber-swagger/v2"
-	"github.com/erdemkosk/go-config-service/api/middleware"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
@@ -41,6 +40,7 @@ func GenerateFiberApp() *fiber.App {
 }
 
 func RegisterRoutes(app *fiber.App) {
+	app.Static("/", "./public")
 	app.Get("/swagger/*", swagger.HandlerDefault) // default
 
 	auth := app.Group("/auth")
@@ -48,8 +48,9 @@ func RegisterRoutes(app *fiber.App) {
 
 	api := app.Group("/api")
 	api.Get("/config/:key", handlers.GetConfig)
-	api.Put("/config/:key", middleware.Protected(), handlers.UpdateConfig)
-	api.Post("/config/", middleware.Protected(), handlers.CreateConfig)
-	api.Delete("/config/:key", middleware.Protected(), handlers.DeleteConfig)
+	api.Get("/config/", handlers.GetConfigs)
+	api.Put("/config/:key", handlers.UpdateConfig)
+	api.Post("/config/", handlers.CreateConfig)
+	api.Delete("/config/:key", handlers.DeleteConfig)
 
 }

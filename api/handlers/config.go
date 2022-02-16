@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/url"
 	"time"
+	"fmt"
 
 	constValues "github.com/erdemkosk/go-config-service/api/consts"
 	models "github.com/erdemkosk/go-config-service/api/models"
@@ -60,6 +61,33 @@ func GetConfig(c *fiber.Ctx) error {
 	return c.Status(200).JSON(&fiber.Map{
 		"success": true,
 		"config":  configFormatted,
+	})
+}
+
+
+// @Summary Get configs 
+// @Description Get configs
+// @Tags config
+// @Accept json
+// @Produce json
+// @Success 200 {object} models.ExampleGetConfigs{}
+// @Security Authorization
+// @Router /api/config/ [get]
+func GetConfigs(c *fiber.Ctx) error {
+	
+	configs, err := services.GetConfigs()
+
+	if err != nil{
+		fmt.Print(err)
+		return c.Status(404).JSON(&fiber.Map{
+			"success": false,
+			"error":   ERROR_CONNOT_FIND,
+		})
+	}
+
+	return c.Status(200).JSON(&fiber.Map{
+		"success": true,
+		"config":  configs,
 	})
 }
 
