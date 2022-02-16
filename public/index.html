@@ -21,13 +21,13 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.26.0/axios.min.js"
     integrity="sha512-bPh3uwgU5qEMipS/VOmRqynnMXGGSRv+72H/N260MQeXZIK4PG48401Bsby9Nq5P5fz7hy5UGNmC/W1Z51h2GQ=="
     crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <title>Cliente</title>
+  <title>Go Config Panel</title>
 </head>
 
 <body>
 
   <div class="container">
-    <h3 class="p-3 text-center">Vue.js - Display a list of items with v-for</h3>
+    <h1 class="p-3 text-center">Go config Panel</h1>
     <table class="table table-striped table-bordered" id="fifthTable">
       <thead>
         <tr>
@@ -40,18 +40,18 @@
         <tr v-for="row in rows">
           <td v-for="(col, index) in columns">
             <div v-if="index != 5">{{row[col]}} </div>
-            <div v-if="index == 5">
-              <pre>{{ JSON.stringify(row.Value, null, 2) }}</pre>
+            <div style="width:200px; overflow:hidden" v-if="index == 5">
+              <pre>{{ JSON.stringify(row.value, null, 2) }}</pre>
             </div>
 
           </td>
           <td>
             <div>
-              <textarea :value="JSON.stringify(row.Value,undefined, 2)" rows="10" cols="35"
-                placeholder="Add config here" @input="updateTheVariable($event.target.value, row.Id)"></textarea>
+              <textarea :value="JSON.stringify(row.value,undefined, 2)" rows="10" cols="35"
+                placeholder="Add config here" @input="updateTheVariable($event.target.value, row._id)"></textarea>
               <button type="button" class="btn btn-primary"
-                @click="updateConfig(row.Type,row.Key,row.Value)">Update</button><button type="button"
-                class="btn btn-danger" @click="deleteConfig(row.Key)">Delete</button>
+                @click="updateConfig(row.type,row.key,row.value)">Update</button><button type="button"
+                class="btn btn-danger" @click="deleteConfig(row.key)">Delete</button>
             </div>
           </td>
         </tr>
@@ -64,6 +64,7 @@
 </html>
 
 <script>
+  var baseUrl = "https://go-config-server.herokuapp.com/";
   var fifthTable = new Vue({
     el: '#fifthTable',
     data: {
@@ -98,19 +99,19 @@
       },
       updateTheVariable(value, id) {
         for (var i = 0; i < this.rows.length; i++) {
-          if (this.rows[i].Id === id) {
-            this.rows[i].Value = JSON.parse(value.trim());
+          if (this.rows[i]._id === id) {
+            this.rows[i].value = JSON.parse(value.trim());
           }
         }
       },
       async getConfigs() {
-        let values = await axios.get('http://127.0.0.1:9090/api/config/');
+        let values = await axios.get(baseUrl + 'api/config/');
         this.rows = values.data.config;
       },
       async updateConfig(types, key, value) {
         await axios({
           method: 'put',
-          url: 'http://127.0.0.1:9090/api/config/' + key,
+          url: baseUrl + 'api/config/' + key,
           headers: {},
           data: {
             type: types,
@@ -120,7 +121,7 @@
         this.getConfigs();
       },
       async deleteConfig(key) {
-        await axios.delete('http://127.0.0.1:9090/api/config/' + key);
+        await axios.delete( baseUrl + 'api/config/' + key);
         this.getConfigs();
       }
     },
