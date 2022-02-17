@@ -40,6 +40,15 @@
       <button type="button" class="btn btn-primary mt-3 ml-3" @click="showAddSongModal()">
         Create a new Config
       </button>
+
+     <div style="float: right; margin: 5px " v-if="token == ''">
+      <span>Id:</span><input  placeholder="Id" v-model="id">
+      <span>Password:</span><input type="password"  placeholder="password"  v-model="password">
+      <button type="button" class="btn btn-primary mt-3 ml-3" @click="loginUser()">
+        Login
+      </button>
+      
+    </div>
       
       <!-- Modal -->
       <div class="modal" id="addSongModal" tabindex="-10" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
@@ -118,9 +127,14 @@
 
       ],
       isCreateModelOpen: false,
+      token:'',
     },
     created() {
     bus.$on('getConfigs', () => {
+      this.getConfigs();
+    });
+    bus.$on('token', (token) => {
+      this.token = token;
       this.getConfigs();
     });
   },
@@ -152,14 +166,22 @@
         }
       },
       async getConfigs() {
-        let values = await axios.get(baseUrl + 'api/config/');
+        const values = await axios({
+          method: 'get',
+          url: baseUrl + 'api/config/',
+          headers: {
+            Authorization: this.token,
+          }
+        });
         this.rows = values.data.config;
       },
       async updateConfig(types, key, value) {
         await axios({
           method: 'put',
           url: baseUrl + 'api/config/' + key,
-          headers: {},
+          headers: {
+            Authorization: this.token,
+          },
           data: {
             type: types,
             value,
@@ -168,12 +190,18 @@
         this.getConfigs();
       },
       async deleteConfig(key) {
-        await axios.delete(baseUrl + 'api/config/' + key);
+        await axios({
+          method: 'delete',
+          url: baseUrl + 'api/config/' + key,
+          headers: {
+            Authorization: this.token,
+          },
+        });
         this.getConfigs();
       }
     },
     beforeMount() {
-      this.getConfigs();
+      //this.getConfigs();
     },
     computed: {
       "columns": function columns() {
@@ -191,6 +219,9 @@
     selectedType: '',
     configKey:'',
     configValue:'',
+    id:'',
+    password:'',
+    token:'',
     types: [
     	{id: 'String', name: 'String'},
       {id: 'Number', name: 'Number'},
@@ -199,11 +230,22 @@
     ]
     },
   methods: {
-    showModal: function() {
-     alert('erdem')
-    },
     showAddSongModal() {
         $('#addSongModal').modal('show');
+    },
+    async loginUser() {
+      const response = await axios({
+          method: 'post',
+          url: baseUrl + 'auth/login/',
+          headers: {},
+          data: {
+            identity: this.id,
+            password: this.password,
+          }
+        });
+
+        this.token = 'Bearer '+response.data.data
+        bus.$emit('token' , this.token);
     },
     async createConfig() {
         $('#addSongModal').modal('hide');
