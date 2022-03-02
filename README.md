@@ -1,6 +1,6 @@
 # go-config-service
 
-![Logo](https://i.imgur.com/YqPKnqI.png)
+![Logo](https://i.imgur.com/ils08xQ.png)
 
 
 It is a config server developed for other services or programs to use. Data can be kept according to the data type.😎. 
