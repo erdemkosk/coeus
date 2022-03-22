@@ -16,6 +16,10 @@ type ConfigUpdate struct {
 	Value interface{} ``
 }
 
+type GetConfigsByKey struct {
+	Keys [] string `json:"keys" example:"co:test,co:array,co:json"`
+}
+
 type AuthToken struct {
 	Success bool        `json:"success"`
 	Data    interface{} `json:"data"`

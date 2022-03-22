@@ -52,6 +52,7 @@ func RegisterRoutes(app *fiber.App) {
 	api.Get("/config/", middleware.Protected(), handlers.GetConfigs)
 	api.Put("/config/:key", middleware.Protected(), handlers.UpdateConfig)
 	api.Post("/config/", middleware.Protected(), handlers.CreateConfig)
+	api.Post("/config/by-keys", middleware.Protected(), handlers.GetConfigsByKeys)
 	api.Delete("/config/:key", middleware.Protected(), handlers.DeleteConfig)
 
 }

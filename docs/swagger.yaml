@@ -51,6 +51,17 @@ definitions:
       success:
         type: boolean
     type: object
+  models.GetConfigsByKey:
+    properties:
+      keys:
+        example:
+        - co:test
+        - co:array
+        - co:json
+        items:
+          type: string
+        type: array
+    type: object
   models.LoginInput:
     properties:
       identity:
@@ -191,6 +202,30 @@ paths:
       security:
       - Authorization: []
       summary: Update config with using key
+      tags:
+      - config
+  /api/config/by-keys:
+    post:
+      consumes:
+      - application/json
+      description: Get config with using keys
+      parameters:
+      - description: Config Keys
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/models.GetConfigsByKey'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.ExampleGetConfigs'
+      security:
+      - Authorization: []
+      summary: Get config with using keys
       tags:
       - config
   /auth/login:

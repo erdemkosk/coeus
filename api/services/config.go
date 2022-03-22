@@ -80,6 +80,40 @@ func GetConfigs() ([]models.Config, error) {
 	return result, nil
 }
 
+func GetConfigsByKeys(keys []string) ([]models.Config , error) {
+	result := []models.Config{}
+
+	log.Println(keys)
+
+	filter := bson.M{"key": bson.M{"$in": keys}}
+
+	client, err := mongo.GetMongoClient()
+	if err != nil {
+		return result, err
+	}
+
+	collection := client.Database(mongo.DB).Collection(mongo.COLLECTION)
+
+	cursor, err := collection.Find(context.TODO(), filter)
+	if err != nil {
+		return result, err
+	}
+
+	tempResult := []bson.M{}
+
+	if err := cursor.All(context.TODO(), &tempResult); err != nil {
+		return result, err
+	}
+
+	obj, err := json.Marshal(tempResult)
+       
+        
+    err = json.Unmarshal(obj, &result)
+
+
+	return result, nil
+}
+
 func CreateConfig(config models.Config) (models.Config, error) {
 	client, err := mongo.GetMongoClient()
 	if err != nil {

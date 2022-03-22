@@ -91,6 +91,55 @@ func GetConfigs(c *fiber.Ctx) error {
 	})
 }
 
+// GetConfig is a function to get a book by ID
+// @Summary Get config with using keys
+// @Description Get config with using keys
+// @Tags config
+// @Accept json
+// @Produce json
+// @Param data body models.GetConfigsByKey true "Config Keys"
+// @Success 200 {object} models.ExampleGetConfigs{}
+// @Security Authorization
+// @Router /api/config/by-keys [post]
+func GetConfigsByKeys(c *fiber.Ctx) error {
+	value := &models.GetConfigsByKey{}
+
+    if err := c.BodyParser(value); err != nil {
+       return err
+    }
+
+	configs, err := services.GetConfigsByKeys([]string(value.Keys))
+
+	if err != nil{
+		fmt.Print(err)
+		return c.Status(404).JSON(&fiber.Map{
+			"success": false,
+			"error":   ERROR_CONNOT_FIND,
+		})
+	}
+
+	formattedConfigs := []models.ConfigFormatted{}
+
+	for i, s := range configs {
+		formattedConfig := models.ConfigFormatted{
+			Key:    s.Key,
+			Type:   s.Type,
+			Value:  s.Value,
+		}
+
+		fmt.Print(i)
+	
+		formattedConfigs = append(formattedConfigs, formattedConfig)
+	}
+
+	fmt.Print(formattedConfigs)
+
+	return c.Status(200).JSON(&fiber.Map{
+		"success": true,
+		"config":  formattedConfigs,
+	})
+}
+
 // @Summary Create config with using key and type
 // @Description Create config with using key type
 // @Tags config

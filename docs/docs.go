@@ -88,6 +88,45 @@ const docTemplate_swagger = `{
                 }
             }
         },
+        "/api/config/by-keys": {
+            "post": {
+                "security": [
+                    {
+                        "Authorization": []
+                    }
+                ],
+                "description": "Get config with using keys",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "config"
+                ],
+                "summary": "Get config with using keys",
+                "parameters": [
+                    {
+                        "description": "Config Keys",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.GetConfigsByKey"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.ExampleGetConfigs"
+                        }
+                    }
+                }
+            }
+        },
         "/api/config/{key}": {
             "get": {
                 "security": [
@@ -329,6 +368,22 @@ const docTemplate_swagger = `{
             "properties": {
                 "success": {
                     "type": "boolean"
+                }
+            }
+        },
+        "models.GetConfigsByKey": {
+            "type": "object",
+            "properties": {
+                "keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "co:test",
+                        "co:array",
+                        "co:json"
+                    ]
                 }
             }
         },
