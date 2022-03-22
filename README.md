@@ -1,6 +1,6 @@
-# go-config-service
+# Coeus
 
-![Logo](https://i.imgur.com/ils08xQ.png)
+![Logo](https://i.imgur.com/8t6Lo9I.jpg)
 
 
 It is a config server developed for other services or programs to use. Data can be kept according to the data type.😎. 
@@ -11,12 +11,8 @@ It is a config server developed for other services or programs to use. Data can 
 ![Logo](https://i.imgur.com/sAmY4b8.png)
 ![Logo](https://i.imgur.com/cRwwJBO.png)
 
-[Demo url 😎](https://go-config-server.herokuapp.com/docs/index.html#/config/get_api_config__key_)
-
-Only for this endpoint no login is required. You can use it with config name specified in the picture. ( {key : co:test types: "String" })
-
 ### Swagger🎉
-http://localhost:4000/docs/index.html
+http://localhost:4000/swagger/index.html
 
 Each endpoint is protected with jwt. It must be entered with default id and pass .env.
 
