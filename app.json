@@ -10,9 +10,6 @@
     ],
     "website": "https://github.com/erdemkosk/coeus",
     "repository": "https://github.com/erdemkosk/coeus",
-    "scripts": {
-      "postdeploy": "bundle exec rake bootstrap"
-    },
     "env": {
       "ADMIN_USER_ID": {
         "description": "For auth side u need to define identity",

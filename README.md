@@ -1,6 +1,6 @@
 # Coeus
 
-![Logo](https://i.imgur.com/8t6Lo9I.jpg)
+![Logo](./coeus.svg)
 
 
 It is a config server developed for other services or programs to use. Data can be kept according to the data type.😎. 
