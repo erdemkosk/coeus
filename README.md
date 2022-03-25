@@ -56,6 +56,47 @@ The npm client wrapper for javascript is currently in development.
 $ npm i coeus-client
 ```
 
+### Example of Usage
+
+```sh
+const coeus = require('coeus-client');
+
+(async () => {
+    await coeus.connect({
+        url: 'url',
+        identity: 'id',
+        password: 'password',
+        interval: 5 * 1000, // update interval time
+    })
+    
+ // add needed configs
+    await coeus.client.addKeys({ keys: ['co:email', 'co:json','co:NUMBER_OF_GOOD_TIMES'] });
+    // U can discard any config but ı dont recemended that.
+    coeus.client.discard({ key: 'co:email' });
+
+// this is updated event on every interval
+    coeus.client.on('updated', (configs) => {
+        console.log(configs);
+    });
+// this error event for when getting error on server
+    coeus.client.on('error', (value) => {
+        console.log(value);
+    });
+})();
+
+const express = require('express')
+const app = express()
+const port = 3000
+
+app.get('/', (req, res) => {
+    res.send(coeus.client.getConfig({ key: 'co:NUMBER_OF_GOOD_TIMES' }))
+})
+
+app.listen(port, () => {
+    console.log(`Example app listening on port ${port}`)
+})
+```
+
 ### Env Variables✨
 
 | Env        | Example           
