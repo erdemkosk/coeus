@@ -1,0 +1,51 @@
+{
+    "name": "Coeus",
+    "description": "It is a config service developed for other services or programs to use.",
+    "keywords": [
+      "config",
+      "configservice",
+      "flag",
+      "flagmanager",
+      "manager"
+    ],
+    "website": "https://github.com/erdemkosk/coeus",
+    "repository": "https://github.com/erdemkosk/coeus",
+    "scripts": {
+      "postdeploy": "bundle exec rake bootstrap"
+    },
+    "env": {
+      "ADMIN_USER_ID": {
+        "description": "For auth side u need to define identity",
+        "value": "testUser"
+      },
+      "ADMIN_USER_PASS": {
+        "description": "For auth side u need to define identity",
+        "value": "password"
+      },
+      "JWT_SECRET": {
+        "description": "A secret key for verifying the integrity of jwt.",
+        "generator": "secret"
+      },
+      "MONGO_DB_CONNECTION_STRING": {
+        "description": "Mongo db connection string.",
+        "value": ""
+      },
+      "MONGO_DB_NAME": {
+        "description": "Db name.",
+        "value": "config"
+      },
+      "REDIS_HOST": {
+        "description": "Redis host for cache.",
+        "value": ""
+      },
+      "REDIS_PASSWORD": {
+        "description": "Redis password for connection",
+        "value": ""
+      }
+    },
+    "buildpacks": [
+      {
+        "url": "https://github.com/heroku/heroku-buildpack-go.git"
+      }
+    ]
+  }
