@@ -1,54 +1,59 @@
 # Coeus
 
-![Logo](https://i.imgur.com/8t6Lo9I.jpg)
+ ![Logo](https://i.imgur.com/Jgf7swu.gif)
+## Documentation
+
+Coeus is a custom flag and config service creation tool. Its main purpose is to make business decisions used in many projects or to turn off some features when requested, or to keep translations for applications that serve in more than one language. You can easily access the necessary data by cloning and using the npm client. It's free, the only fee is your own server fee. For this reason, it can be changed individually.
+
+>▪️ It can be used to turn on or off some features in the system.
+▪️Information that can change at any time, such as a phone number, can be stored.
+▪️It can be used as a translation storage tool for multiple languages.
 
 
-It is a config server developed for other services or programs to use. Data can be kept according to the data type.😎. 
+In addition, it has a simple panel that is protected by the password you set. In this way, you can easily enter, update or delete your data.
+### Swagger
+localhost:port/swagger/index.html
 
-> Config operations is abstracted from the whole system. You don't have to think ✌️.
-
-### Demo✌️
 ![Logo](https://i.imgur.com/sAmY4b8.png)
-![Logo](https://i.imgur.com/cRwwJBO.png)
-
-### Heroku
-[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/erdemkosk/coeus)
-
-
-### Swagger🎉
-http://localhost:4000/swagger/index.html
 
 Each endpoint is protected with jwt. It must be entered with default id and pass .env.
+## Deployment
+### With Heroku
+[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/erdemkosk/coeus)
+### With Docker
+For Make A Docker Image:
+```sh
+$ docker build -t  go-config-server .
+$ docker run --env-file .env -p 4000:4000 go-config-server
+```
 
-### Tech-Stack🥰
-
-go-config-server uses a number of open source projects to work properly:
+## Tech
 * [Golang] - for runnig server
 * [Mongo Dv] - for storing configs
 * [Redis] - for caching
+* [HTML] - for panel
+* [Vue Js] - for panel operations
 
-### Installation🎆
-
-Rabbitmq-mail-consumer-server requires [Go](https://golang.org/) to run.
-
+## Installation
+Coeus requires [Go](https://golang.org/) to run.
 Install the dependencies and start the server.
+
+```sh
+$ go mod vendor
+$ go get -u github.com/swaggo/swag/cmd/swag
+$ $HOME/go/bin/swag init // for creating swagger files
+```
 
 ```sh
 $ cd go-config-server
 $ go run main.go
 ```
-For Make A Docker Image:
+## Plugins
+
+The npm client wrapper for javascript is currently in development.
 
 ```sh
-$ docker build -t  go-config-server .
-$ docker run --env-file .env -p 4000:4000 go-config-server
-```
-### Install ✨
-
-```sh
-$ go mod vendor
-$ go get -u github.com/swaggo/swag/cmd/swag
-$ $HOME/go/bin/swag init
+$ npm i coeus-client
 ```
 
 ### Env Variables✨
@@ -62,3 +67,16 @@ $ $HOME/go/bin/swag init
 | JWT_SECRET   | jwt secret      
 | REDIS_HOST | redis host
 | REDIS_PASSWORD      | redis password 
+
+## License
+Copyright (c) 2022 Mustafa Erdem Köşk <erdemkosk@gmail.com>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the 'Software'), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+
+  
