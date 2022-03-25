@@ -12,7 +12,7 @@ It is a config server developed for other services or programs to use. Data can 
 ![Logo](https://i.imgur.com/cRwwJBO.png)
 
 ### Heroku
-![Deploy](https://www.herokucdn.com/deploy/button.svg)(https://heroku.com/deploy?template=https://github.com/erdemkosk/coeus)
+[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/erdemkosk/coeus)
 
 
 ### Swagger🎉
