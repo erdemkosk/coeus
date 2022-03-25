@@ -10,6 +10,7 @@
     ],
     "website": "https://github.com/erdemkosk/coeus",
     "repository": "https://github.com/erdemkosk/coeus",
+    "logo": "https://github.com/erdemkosk/coeus/raw/master/coeus.svg",
     "env": {
       "ADMIN_USER_ID": {
         "description": "For auth side u need to define identity",
