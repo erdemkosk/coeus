@@ -60,29 +60,25 @@ $ npm i coeus-client
 
 ```sh
 const coeus = require('coeus-client');
+const config = require('../../config');
 
-(async () => {
-    await coeus.connect({
-        url: 'url',
-        identity: 'id',
-        password: 'password',
-        interval: 5 * 1000, // update interval time
-    })
-    
- // add needed configs
-    await coeus.client.addKeys({ keys: ['co:email', 'co:json','co:NUMBER_OF_GOOD_TIMES'] });
-    // U can discard any config but ı dont recemended that.
-    coeus.client.discard({ key: 'co:email' });
+coeus.connect({
+  url: config.coeus.url,
+  identity: config.coeus.identity,
+  password: config.coeus.password,
+  interval: config.coeus.interval,
+});
+
+coeus.client.addKeys({ keys: ['co:email', 'co:json', 'co:NUMBER_OF_GOOD_TIMES'] });
 
 // this is updated event on every interval
-    coeus.client.on('updated', (configs) => {
-        console.log(configs);
-    });
+coeus.client.on('updated', (configs) => {
+  console.log(configs);
+});
 // this error event for when getting error on server
-    coeus.client.on('error', (value) => {
-        console.log(value);
-    });
-})();
+coeus.client.on('error', (value) => {
+  console.log(value);
+});
 
 const express = require('express')
 const app = express()
