@@ -405,14 +405,6 @@
                 return Object.keys(this.rows[0])
             }
         },
-        mounted() {
-            var self = this;
-            window.addEventListener('keyup', function (event) {
-                if (event.keyCode === 13) {
-                   self.loginUser();
-                }
-            });
-        }
     });
 </script>
 
