@@ -121,14 +121,15 @@
                                     <span class="input-group-text" id="basic-addon1">Id:</span>
                                 </div>
                                 <input type="text" class="form-control" placeholder="Username" aria-label="Username"
-                                    aria-describedby="basic-addon1"  v-model="id">
+                                    aria-describedby="basic-addon1" v-model="id">
                                 <div class="input-group-prepend">
                                     <span class="input-group-text" id="basic-addon1">Password:</span>
                                 </div>
                                 <input type="password" class="form-control" placeholder="Password" aria-label="Password"
                                     aria-describedby="basic-addon1" v-model="password">
                                 <button type="button"
-                                    class="mr-2 btn-icon btn-icon-only btn btn-outline-primary" @click="loginUser()">Login</button>
+                                    class="mr-2 btn-icon btn-icon-only btn btn-outline-primary"
+                                    @click="loginUser()">Login</button>
                             </div>
                         </li>
 
@@ -209,7 +210,7 @@
             <div class="app-main__outer">
                 <div class="app-main__inner">
 
-                    
+
                     <div class="row">
                         <div class="col-md-12">
                             <div class="main-card mb-3 card">
@@ -403,6 +404,14 @@
                 }
                 return Object.keys(this.rows[0])
             }
+        },
+        mounted() {
+            var self = this;
+            window.addEventListener('keyup', function (event) {
+                if (event.keyCode === 13) {
+                   self.loginUser();
+                }
+            });
         }
     });
 </script>
