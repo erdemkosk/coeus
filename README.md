@@ -16,6 +16,11 @@ localhost:port/swagger/index.html
 
 ![Logo](https://i.imgur.com/sAmY4b8.png)
 
+### Panel
+localhost:port
+
+![Logo](https://i.imgur.com/IN0iz2j.png)
+
 Each endpoint is protected with jwt. It must be entered with default id and pass .env.
 ## Deployment
 ### With Heroku
