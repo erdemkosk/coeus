@@ -116,7 +116,7 @@
                 <div class="app-header-left">
                     <ul class="header-menu nav">
                         <li class="nav-item">
-                            <div class="nav-link" v-if="token == ''">
+                            <div class="nav-link" v-if="token == ''" @keyup.enter.native="loginUser">
                                 <div class="input-group-prepend">
                                     <span class="input-group-text" id="basic-addon1">Id:</span>
                                 </div>
@@ -125,7 +125,7 @@
                                 <div class="input-group-prepend">
                                     <span class="input-group-text" id="basic-addon1">Password:</span>
                                 </div>
-                                <input type="password" class="form-control" placeholder="Password" aria-label="Password"
+                                <input type="password" @keyup.enter='loginUser' class="form-control" placeholder="Password" aria-label="Password"
                                     aria-describedby="basic-addon1" v-model="password">
                                 <button type="button"
                                     class="mr-2 btn-icon btn-icon-only btn btn-outline-primary"
