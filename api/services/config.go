@@ -20,8 +20,6 @@ func GetConfig(types string, key string) (models.Config, error) {
 
 	cachedConfig, cachedError := getCachedConfig(key)
 
-	log.Println(cachedConfig)
-
 	if cachedError == nil && cachedConfig.Key != "" && cachedConfig.Type == types {
 		return cachedConfig, cachedError
 	}
@@ -43,7 +41,6 @@ func GetConfig(types string, key string) (models.Config, error) {
 	obj, err := json.Marshal(tempResult)
        
     err = json.Unmarshal(obj, &result)
-		
 
 	return result, nil
 }
@@ -80,12 +77,36 @@ func GetConfigs() ([]models.Config, error) {
 	return result, nil
 }
 
+func findAndDelete(s []string, item string) []string {
+    index := 0
+    for _, i := range s {
+        if i != item {
+            s[index] = i
+            index++
+        }
+    }
+    return s[:index]
+}
+
 func GetConfigsByKeys(keys []string) ([]models.Config , error) {
 	result := []models.Config{}
+	cachedResult := []models.Config{}
+	model := models.Config{}
+	configKeys := keys;
 
-	log.Println(keys)
+	cachedConfigs, _ := getCachedConfigs(keys)
 
-	filter := bson.M{"key": bson.M{"$in": keys}}
+	for _, c := range cachedConfigs {
+		
+		if(c != nil){
+			config := c.(string)
+		    json.Unmarshal([]byte(config), &model)
+			cachedResult = append(cachedResult, model)
+			configKeys = findAndDelete(configKeys, model.Key)		
+		}
+	}
+
+	filter := bson.M{"key": bson.M{"$in": configKeys}}
 
 	client, err := mongo.GetMongoClient()
 	if err != nil {
@@ -106,12 +127,16 @@ func GetConfigsByKeys(keys []string) ([]models.Config , error) {
 	}
 
 	obj, err := json.Marshal(tempResult)
-       
-        
+
     err = json.Unmarshal(obj, &result)
+	       
+	for _, s := range result {
+		setCachedConfig(s.Key, &s)
+	}
 
-
-	return result, nil
+	configResults := append(result, cachedResult...)
+	
+	return configResults, nil
 }
 
 func CreateConfig(config models.Config) (models.Config, error) {

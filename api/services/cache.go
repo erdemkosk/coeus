@@ -14,8 +14,13 @@ func getCachedConfig(key string) (models.Config, error) {
 	return config, err
 }
 
+func getCachedConfigs(keys [] string) ([]interface{} , error) {
+	configs, err := plugin.MGet(keys)
+	return configs, err
+}
+
 func setCachedConfig(key string, config *models.Config) {
-	plugin.SetValueWithTTL(key, config, 1000)
+	plugin.SetValueWithTTL(key, config, 500)
 }
 
 func deleteCachedConfig(key string) {

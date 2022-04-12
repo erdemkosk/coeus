@@ -47,6 +47,10 @@ func SetValueWithTTL(key string, value interface{}, ttl int) (bool, error) {
 	return true, err
 }
 
+func MGet(keys []string) ([]interface{}, error) {
+	return redisClient.MGet(keys...).Result()
+}
+
 func RPush(key string, valueList []string) (bool, error) {
 	err := redisClient.RPush(key, valueList).Err()
 	return true, err
